@@ -19,6 +19,8 @@ export const navigationItems = [
   { id: 'production', label: 'Ishlab chiqarish', href: '/dashboard/manufacturing', icon: 'factory', permission: 'production:read' },
   { id: 'cutting', label: 'Kesish', href: '/dashboard/cutting', icon: 'cut', permission: 'cutting:read' },
   { id: 'plot', label: 'PLOT', href: '/dashboard/plot', icon: 'plot', permission: 'plot:read' },
+  { id: 'warehouse', label: 'Tayyor mahsulot', href: '/dashboard/warehouse', icon: 'warehouse', permission: 'warehouse:read' },
+  { id: 'shipments', label: 'Jo\'natmalar', href: '/dashboard/shipments', icon: 'shipment', permission: 'shipment:read' },
   { id: 'qr', label: 'QR Skaner', href: '/dashboard/qr-scanner', icon: 'qr', permission: null },
   { id: 'reports', label: 'Hisobotlar', href: '/dashboard/reports', icon: 'reports', permission: 'analytics:dashboard' },
   { id: 'employees', label: 'Foydalanuvchilar', href: '/dashboard/employees', icon: 'users', permission: 'users:manage' },

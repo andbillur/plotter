@@ -160,6 +160,26 @@ class ApiClient {
     return this.request('/cutting/sessions/start', { method: 'POST', body: JSON.stringify(body) });
   }
 
+  async getCuttingSession(id: string) {
+    return this.request<Record<string, unknown> & { products: Record<string, unknown>[] }>(
+      `/cutting/sessions/${id}`
+    );
+  }
+
+  async addCuttingProduct(
+    sessionId: string,
+    body: { widthCm: number; weightKg: number; lengthM?: number; color?: string }
+  ) {
+    return this.request(`/cutting/sessions/${sessionId}/products/add`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async finishCutting(sessionId: string) {
+    return this.request(`/cutting/sessions/${sessionId}/finish`, { method: 'POST' });
+  }
+
   // Plots
   async getPlots(params?: Record<string, string>) {
     const q = params ? `?${new URLSearchParams(params)}` : '';
@@ -172,6 +192,70 @@ class ApiClient {
 
   async createPlot(body: { widthCm: number }) {
     return this.request('/plots', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async getPlot(id: string) {
+    return this.request<Record<string, unknown> & { items: Record<string, unknown>[] }>(`/plots/${id}`);
+  }
+
+  async addPlotItem(plotId: string, cutProductId: string) {
+    return this.request(`/plots/${plotId}/items/add`, {
+      method: 'POST',
+      body: JSON.stringify({ cutProductId }),
+    });
+  }
+
+  async closePlot(plotId: string) {
+    return this.request(`/plots/${plotId}/close`, { method: 'POST' });
+  }
+
+  // Warehouse
+  async getWarehouseProducts(params?: Record<string, string>) {
+    const q = params ? `?${new URLSearchParams(params)}` : '';
+    return this.request<PaginatedResponse<Record<string, unknown>>>(`/warehouse/products${q}`);
+  }
+
+  async getWarehouseSummary() {
+    return this.request<{ summary: Record<string, unknown>[]; total: Record<string, unknown> }>(
+      '/warehouse/summary'
+    );
+  }
+
+  async registerWarehouseProduct(body: {
+    widthCm: number;
+    weightKg: number;
+    color?: string;
+    lengthM?: number;
+    qrCode?: string;
+  }) {
+    return this.request('/warehouse/products', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  // Shipments
+  async getShipments(params?: Record<string, string>) {
+    const q = params ? `?${new URLSearchParams(params)}` : '';
+    return this.request<PaginatedResponse<Record<string, unknown>>>(`/shipments${q}`);
+  }
+
+  async createShipment(body: { destination?: string; customerName?: string; notes?: string }) {
+    return this.request('/shipments', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async getShipment(id: string) {
+    return this.request<Record<string, unknown> & { items: Record<string, unknown>[] }>(
+      `/shipments/${id}`
+    );
+  }
+
+  async scanShipmentItem(shipmentId: string, qrCode: string) {
+    return this.request(`/shipments/${shipmentId}/scan`, {
+      method: 'POST',
+      body: JSON.stringify({ qrCode }),
+    });
+  }
+
+  async finishShipment(shipmentId: string) {
+    return this.request(`/shipments/${shipmentId}/finish`, { method: 'POST' });
   }
 
   // Analytics

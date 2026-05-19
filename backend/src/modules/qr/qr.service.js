@@ -2,10 +2,10 @@ import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 
 const ROLE_ACTIONS = {
-  super_admin: ['start_production', 'start_cutting', 'add_to_plot', 'receive_bobin', 'receive_clay'],
-  omborchi: ['receive_bobin', 'receive_clay'],
+  super_admin: ['start_production', 'start_cutting', 'add_to_plot', 'receive_bobin', 'receive_clay', 'add_to_shipment', 'register_warehouse'],
+  omborchi: ['receive_bobin', 'receive_clay', 'register_warehouse', 'add_to_shipment'],
   mashina_operatori: ['start_production'],
-  kesuvchi_ishchi: ['start_cutting', 'add_to_plot'],
+  kesuvchi_ishchi: ['start_cutting', 'add_to_plot', 'register_warehouse', 'add_to_shipment'],
   direktor: [],
 };
 
@@ -34,7 +34,11 @@ export async function scan(qrCode, roleName) {
   if (cut.rows.length) {
     type = 'cut_product';
     data = cut.rows[0];
-    if (!data.plot_id) allowedActions.push('add_to_plot');
+    if (!data.plot_id && data.stock_status === 'kesildi') allowedActions.push('add_to_plot');
+    if (data.stock_status === 'kesildi' || data.stock_status === 'plotda') {
+      allowedActions.push('register_warehouse');
+    }
+    if (data.stock_status === 'omborxonada') allowedActions.push('add_to_shipment');
     return buildResponse(type, data, roleName, allowedActions);
   }
 

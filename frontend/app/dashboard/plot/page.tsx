@@ -1,87 +1,155 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { apiClient } from '@/lib/api';
-import { Loader2 } from 'lucide-react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Plus, Lock, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export default function PlotPage() {
   const [plots, setPlots] = useState<Record<string, unknown>[]>([]);
   const [active, setActive] = useState<Record<string, unknown> | null>(null);
+  const [items, setItems] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
+  const [widthCm, setWidthCm] = useState('202');
+  const [productQr, setProductQr] = useState('');
+
+  const load = useCallback(async () => {
+    const [list, act] = await Promise.all([
+      apiClient.getPlots({ limit: '30' }),
+      apiClient.getActivePlot(),
+    ]);
+    setPlots(list.data);
+    setActive(act);
+    if (act?.id) {
+      const detail = await apiClient.getPlot(String(act.id));
+      setItems(detail.items || []);
+    } else setItems([]);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    Promise.all([apiClient.getPlots({ limit: '30' }), apiClient.getActivePlot()])
-      .then(([list, act]) => {
-        setPlots(list.data);
-        setActive(act);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
+
+  const handleCreate = async () => {
+    try {
+      await apiClient.createPlot({ widthCm: parseFloat(widthCm) });
+      toast.success('PLOT ochildi');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    }
+  };
+
+  const handleAddItem = async () => {
+    if (!active?.id || !productQr) return;
+    try {
+      const scan = await apiClient.scanQr(productQr);
+      if (scan.type !== 'cut_product') {
+        toast.error('Bu kesilgan mahsulot QR emas');
+        return;
+      }
+      await apiClient.addPlotItem(String(active.id), scan.id);
+      toast.success('PLOTga qo\'shildi');
+      setProductQr('');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    }
+  };
+
+  const handleClose = async () => {
+    if (!active?.id) return;
+    try {
+      const res = await apiClient.closePlot(String(active.id));
+      toast.success(`PLOT yopildi. Keyingi: ${(res as { nextPlotNumber: string }).nextPlotNumber}`);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    }
+  };
 
   return (
     <RoleGuard permission="plot:read">
       <div className="p-4 sm:p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">PLOT partiyalar</h1>
-          <p className="text-slate-600 mt-2">Kesilgan o&apos;ramlar yig&apos;indisi</p>
-        </div>
+        <h1 className="text-3xl font-bold">PLOT partiyalar</h1>
+
+        {!active && (
+          <Card>
+            <CardHeader><CardTitle>Yangi PLOT</CardTitle></CardHeader>
+            <CardContent className="flex gap-3">
+              <div>
+                <Label>Eni (sm)</Label>
+                <Input value={widthCm} onChange={(e) => setWidthCm(e.target.value)} className="max-w-[120px]" />
+              </div>
+              <Button className="self-end" onClick={handleCreate}><Plus className="h-4 w-4 mr-1" />Ochish</Button>
+            </CardContent>
+          </Card>
+        )}
 
         {active && (
-          <Card className="border-green-200 bg-green-50">
+          <Card className="border-green-300 bg-green-50">
             <CardHeader>
-              <CardTitle className="text-green-900">Ochiq PLOT</CardTitle>
+              <CardTitle className="flex justify-between">
+                <span>{String(active.plot_number)} — {active.width_cm} sm</span>
+                <Badge>Ochiq</Badge>
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="font-mono font-bold">{String(active.plot_number)}</p>
-              <p className="text-sm mt-1">
-                Eni: {active.width_cm} sm — {active.total_items} dona,{' '}
-                {Number(active.total_weight_kg).toLocaleString('uz-UZ')} kg
-              </p>
+            <CardContent className="space-y-4">
+              <p>{active.total_items} dona, {Number(active.total_weight_kg).toLocaleString('uz-UZ')} kg</p>
+              <div className="flex gap-3">
+                <Input placeholder="Kesilgan o'ram QR" value={productQr} onChange={(e) => setProductQr(e.target.value)} className="max-w-sm" />
+                <Button onClick={handleAddItem}>Qo&apos;shish</Button>
+                <Button variant="destructive" onClick={handleClose}><Lock className="h-4 w-4 mr-1" />Yopish → omborga</Button>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>QR</TableHead>
+                    <TableHead>kg</TableHead>
+                    <TableHead>Rang</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((p) => (
+                    <TableRow key={String(p.id)}>
+                      <TableCell className="font-mono text-xs">{String(p.qr_code)}</TableCell>
+                      <TableCell>{p.weight_kg}</TableCell>
+                      <TableCell>{String(p.color || 'white')}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         )}
 
         <Card>
-          <CardContent className="p-0 pt-6">
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin" />
-              </div>
-            ) : (
+          <CardHeader><CardTitle>Barcha PLOTlar</CardTitle></CardHeader>
+          <CardContent className="p-0">
+            {loading ? <div className="p-8 flex justify-center"><Loader2 className="animate-spin" /></div> : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Raqam</TableHead>
-                    <TableHead>Eni (sm)</TableHead>
-                    <TableHead>Dona</TableHead>
-                    <TableHead>Og&apos;irlik (kg)</TableHead>
                     <TableHead>Holat</TableHead>
+                    <TableHead>kg</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {plots.map((p) => (
                     <TableRow key={String(p.id)}>
-                      <TableCell className="font-mono">{String(p.plot_number)}</TableCell>
-                      <TableCell>{p.width_cm}</TableCell>
-                      <TableCell>{p.total_items}</TableCell>
+                      <TableCell>{String(p.plot_number)}</TableCell>
+                      <TableCell>{p.status === 'ochiq' ? 'Ochiq' : 'Yopiq'}</TableCell>
                       <TableCell>{Number(p.total_weight_kg).toLocaleString('uz-UZ')}</TableCell>
-                      <TableCell>
-                        <Badge variant={p.status === 'ochiq' ? 'default' : 'secondary'}>
-                          {p.status === 'ochiq' ? 'Ochiq' : 'Yopiq'}
-                        </Badge>
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

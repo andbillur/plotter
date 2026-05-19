@@ -46,9 +46,12 @@ export async function addProduct(sessionId, data) {
 
   const qr = data.qrCode || generateQrCode('CUT');
   const { rows } = await db.query(
-    `INSERT INTO cut_products (qr_code, cutting_session_id, parent_paper_id, width_cm, weight_kg, length_m)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [qr, sessionId, sess.rows[0].parent_paper_id, data.widthCm, data.weightKg, data.lengthM || null]
+    `INSERT INTO cut_products (qr_code, cutting_session_id, parent_paper_id, width_cm, weight_kg, length_m, color, stock_status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'kesildi') RETURNING *`,
+    [
+      qr, sessionId, sess.rows[0].parent_paper_id, data.widthCm, data.weightKg,
+      data.lengthM || null, data.color || 'white',
+    ]
   );
 
   await db.query(

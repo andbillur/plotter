@@ -55,7 +55,7 @@ export async function addItem(plotId, cutProductId) {
   if (prod.rows[0].plot_id) throw new AppError('Mahsulot boshqa PLOTda', 400);
 
   const { rows } = await db.query(
-    `UPDATE cut_products SET plot_id = $1 WHERE id = $2 RETURNING *`,
+    `UPDATE cut_products SET plot_id = $1, stock_status = 'plotda' WHERE id = $2 RETURNING *`,
     [plotId, cutProductId]
   );
   const updated = await db.query(`SELECT * FROM plots WHERE id = $1`, [plotId]);
@@ -79,6 +79,11 @@ export async function close(plotId, userId) {
     [userId, plotId]
   );
   if (!rows.length) throw new AppError('Ochiq PLOT topilmadi', 404);
+  await db.query(
+    `UPDATE cut_products SET stock_status = 'omborxonada', plot_id = NULL
+     WHERE plot_id = $1`,
+    [plotId]
+  );
   const nextCode = await db.query(`SELECT generate_plot_number() AS next_plot_number`);
   return { closedPlot: rows[0], nextPlotNumber: nextCode.rows[0].next_plot_number };
 }

@@ -29,6 +29,7 @@ cuttingRouter.post('/sessions/:id/products/add', checkPermission('cutting:manage
     weightKg: z.number().positive(),
     lengthM: z.number().optional(),
     qrCode: z.string().optional(),
+    color: z.string().optional(),
   }),
 })), asyncHandler(async (req, res) => {
   res.status(201).json(await svc.addProduct(req.params.id, req.validated.body));
