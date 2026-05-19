@@ -26,21 +26,21 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       }
 
       apiClient.setToken(storedToken);
-      if (!user) {
-        try {
-          const currentUser = await apiClient.getCurrentUser();
-          setUser(currentUser, storedToken);
-        } catch {
-          localStorage.removeItem('authToken');
-          router.push('/login');
-        }
+      try {
+        const currentUser = await apiClient.getCurrentUser();
+        setUser(currentUser, storedToken);
+      } catch {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('refreshToken');
+        router.push('/login');
+      } finally {
+        setReady(true);
+        setLoading(false);
       }
-      setReady(true);
-      setLoading(false);
     };
 
     checkAuth();
-  }, [mounted, user, setUser, setLoading, router]);
+  }, [mounted, setUser, setLoading, router]);
 
   if (!mounted || !ready) {
     return (
@@ -50,6 +50,6 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!localStorage.getItem('authToken') && !user) return null;
+  if (!user) return null;
   return <>{children}</>;
 }

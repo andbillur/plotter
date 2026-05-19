@@ -45,7 +45,9 @@ export function Sidebar() {
   if (!user) return null;
 
   const perms = user.permissions || [];
-  const visibleItems = navigationItems.filter((item) => hasPermission(perms, item.permission));
+  const visibleItems = navigationItems.filter((item) =>
+    hasPermission(perms, item.permission, user.role)
+  );
 
   const handleLogout = async () => {
     const { apiClient } = await import('@/lib/api');

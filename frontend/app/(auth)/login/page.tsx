@@ -22,7 +22,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const response = await apiClient.login(username, password);
-      setUser(response.user, response.token);
+      const fullUser = await apiClient.getCurrentUser();
+      setUser(fullUser, response.token);
       toast.success('Muvaffaqiyatli kirdingiz');
       router.push('/dashboard');
     } catch (error) {

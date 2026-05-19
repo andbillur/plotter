@@ -31,7 +31,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
   hasPermission: (code) => {
-    const perms = get().user?.permissions || [];
+    const user = get().user;
+    if (user?.role === 'super_admin') return true;
+    const perms = user?.permissions || [];
     return perms.includes(code);
   },
 }));

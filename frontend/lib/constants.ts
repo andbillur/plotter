@@ -25,8 +25,13 @@ export const navigationItems = [
   { id: 'settings', label: 'Sozlamalar', href: '/dashboard/settings', icon: 'settings', permission: 'cost_config:manage' },
 ];
 
-export function hasPermission(permissions: string[], code: string | null): boolean {
+export function hasPermission(
+  permissions: string[],
+  code: string | null,
+  role?: string
+): boolean {
   if (!code) return true;
+  if (role === 'super_admin') return true;
   return permissions.includes(code);
 }
 
