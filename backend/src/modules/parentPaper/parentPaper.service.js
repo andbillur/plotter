@@ -95,3 +95,17 @@ export async function list(query) {
   );
   return paginatedResponse(rows, count.rows[0].total, { page, limit });
 }
+
+/** Kesish uchun: hali kesilmagan ona qog'ozlar */
+export async function listAvailableForCutting() {
+  const { rows } = await db.query(
+    `SELECT pp.id, pp.qr_code, pp.weight_kg, pp.clay_share_kg, pp.created_at,
+            ps.session_code
+     FROM parent_papers pp
+     LEFT JOIN production_sessions ps ON ps.id = pp.source_session_id
+     WHERE pp.is_cut = false
+     ORDER BY pp.created_at DESC
+     LIMIT 100`
+  );
+  return rows;
+}

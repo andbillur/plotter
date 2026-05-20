@@ -100,6 +100,16 @@ class ApiClient {
     return this.request<Bobin>(`/bobins/qr/${encodeURIComponent(qrCode)}`);
   }
 
+  async splitParentPaper(body: {
+    sessionId: string;
+    children: { weightKg: number; qrCode?: string }[];
+  }) {
+    return this.request<Record<string, unknown>[]>('/parent-papers/split', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
   // Clay
   async getClayBalance() {
     return this.request<{ current_stock_kg: number; bag_weight_kg: number }>('/clay/balance');
@@ -151,6 +161,14 @@ class ApiClient {
   }
 
   // Cutting
+  async getParentPapersAvailableForCutting() {
+    return this.request<Record<string, unknown>[]>('/parent-papers/available-for-cutting');
+  }
+
+  async getBobinsInWarehouse() {
+    return this.request<PaginatedResponse<Bobin>>('/bobins?status=omborxonada&limit=100');
+  }
+
   async getCuttingSessions(params?: Record<string, string>) {
     const q = params ? `?${new URLSearchParams(params)}` : '';
     return this.request<PaginatedResponse<Record<string, unknown>>>(`/cutting/sessions${q}`);

@@ -9,6 +9,10 @@ import * as svc from './parentPaper.service.js';
 export const parentPaperRouter = Router();
 parentPaperRouter.use(auth);
 
+parentPaperRouter.get('/available-for-cutting', checkPermission('cutting:read'), asyncHandler(async (_req, res) => {
+  res.json(await svc.listAvailableForCutting());
+}));
+
 parentPaperRouter.get('/', checkPermission('parent_paper:read'), asyncHandler(async (req, res) => {
   res.json(await svc.list(req.query));
 }));

@@ -5,11 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { RoleGuard } from '@/components/layout/RoleGuard';
+import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { apiClient } from '@/lib/api';
 import { sessionStatusLabels } from '@/lib/constants';
-import { Play, Plus, CheckCircle, Loader2 } from 'lucide-react';
+import { Play, Plus, CheckCircle, Loader2, Info, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -18,19 +18,24 @@ const COLORS = ['white', 'cream', 'blue', 'grey', 'other'];
 
 export default function CuttingPage() {
   const [sessions, setSessions] = useState<Record<string, unknown>[]>([]);
+  const [availablePapers, setAvailablePapers] = useState<Record<string, unknown>[]>([]);
   const [activeSession, setActiveSession] = useState<Record<string, unknown> | null>(null);
   const [products, setProducts] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [ppQr, setPpQr] = useState('');
   const [inputKg, setInputKg] = useState('');
+  const [selectedPaper, setSelectedPaper] = useState<Record<string, unknown> | null>(null);
   const [prodForm, setProdForm] = useState({ widthCm: '', weightKg: '', color: 'white' });
 
   const load = useCallback(() => {
-    apiClient
-      .getCuttingSessions({ limit: '50' })
-      .then((res) => {
-        setSessions(res.data);
-        const open = res.data.find((s) => s.status === 'boshlangan');
+    Promise.all([
+      apiClient.getCuttingSessions({ limit: '50' }),
+      apiClient.getParentPapersAvailableForCutting(),
+    ])
+      .then(([cutRes, papers]) => {
+        setSessions(cutRes.data);
+        setAvailablePapers(papers);
+        const open = cutRes.data.find((s) => s.status === 'boshlangan');
         if (open) {
           setActiveSession(open);
           apiClient.getCuttingSession(String(open.id)).then((d) => setProducts(d.products || []));
@@ -46,15 +51,43 @@ export default function CuttingPage() {
     load();
   }, [load]);
 
+  const selectPaper = (p: Record<string, unknown>) => {
+    setSelectedPaper(p);
+    setPpQr(String(p.qr_code));
+    setInputKg(String(p.weight_kg));
+  };
+
+  const handleScanPaper = async (code: string) => {
+    setPpQr(code);
+    try {
+      const p = await apiClient.scanQr(code);
+      if (p.type === 'parent_paper') {
+        const d = p.data;
+        setSelectedPaper(d);
+        setInputKg(String(d.weight_kg));
+        toast.success('Ona qog\'oz topildi');
+      } else {
+        toast.error('Bu ona qog\'oz QR emas');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Topilmadi');
+    }
+  };
+
   const handleStart = async () => {
+    if (!ppQr || !inputKg) {
+      toast.error('Ona qog\'oz va og\'irlik kerak');
+      return;
+    }
     try {
       const s = await apiClient.startCutting({
-        parentPaperQrCode: ppQr,
+        parentPaperQrCode: ppQr.trim(),
         inputWeightKg: parseFloat(inputKg),
       });
       toast.success(`Kesish boshlandi: ${(s as { session_code: string }).session_code}`);
       setPpQr('');
       setInputKg('');
+      setSelectedPaper(null);
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Xatolik');
@@ -95,15 +128,86 @@ export default function CuttingPage() {
       <div className="p-4 sm:p-6 space-y-6">
         <h1 className="text-3xl font-bold">Kesish</h1>
 
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-4 text-sm text-blue-900 space-y-2">
+            <p className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Ona qog&apos;oz kodi qayerdan?</p>
+            <ol className="list-decimal list-inside space-y-1 text-blue-800">
+              <li>Ishlab chiqarish FINISH dan keyin operator <strong>ona qog&apos;oz SPLIT</strong> qiladi — har bo&aposlak uchun <strong>PP-...</strong> QR yaratiladi</li>
+              <li>Etiketdagi QR ni skanerlang yoki quyidagi ro&apos;yxatdan tanlang</li>
+              <li>Kesishda shu kod bilan sessiya ochiladi</li>
+            </ol>
+          </CardContent>
+        </Card>
+
         {!activeSession && (
-          <Card>
-            <CardHeader><CardTitle className="flex gap-2 items-center"><Play className="h-5 w-5" />Sessiya boshlash</CardTitle></CardHeader>
-            <CardContent className="flex flex-wrap gap-3">
-              <Input placeholder="Ona qog'oz QR" value={ppQr} onChange={(e) => setPpQr(e.target.value)} className="max-w-xs" />
-              <Input placeholder="Kirish og'irligi (kg)" type="number" value={inputKg} onChange={(e) => setInputKg(e.target.value)} className="max-w-xs" />
-              <Button onClick={handleStart}>Boshlash</Button>
-            </CardContent>
-          </Card>
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex gap-2 items-center"><Play className="h-5 w-5" />Kesishni boshlash</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <BarcodeScanner
+                  label="Ona qog'oz barcode / QR"
+                  placeholder="PP-... yoki skaner"
+                  onScan={handleScanPaper}
+                />
+                {selectedPaper && (
+                  <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm">
+                    <p className="font-mono font-bold">{String(selectedPaper.qr_code)}</p>
+                    <p>{Number(selectedPaper.weight_kg).toLocaleString('uz-UZ')} kg — {String(selectedPaper.session_code || '')}</p>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <Label>Kirish og&apos;irligi (kg)</Label>
+                    <Input type="number" step="0.001" value={inputKg} onChange={(e) => setInputKg(e.target.value)} className="max-w-[140px]" />
+                  </div>
+                  <Button onClick={handleStart} disabled={!ppQr}>Boshlash</Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <List className="h-5 w-5" />
+                  Kesishga tayyor ona qog&apos;ozlar ({availablePapers.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {availablePapers.length === 0 ? (
+                  <p className="p-6 text-slate-500 text-sm">
+                    Hozircha ona qog&apos;oz yo&apos;q. Avval ishlab chiqarishda FINISH va SPLIT qiling.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>QR kod</TableHead>
+                        <TableHead>kg</TableHead>
+                        <TableHead>Sessiya</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {availablePapers.map((p) => (
+                        <TableRow key={String(p.id)} className={selectedPaper?.id === p.id ? 'bg-green-50' : ''}>
+                          <TableCell className="font-mono text-xs">{String(p.qr_code)}</TableCell>
+                          <TableCell>{Number(p.weight_kg).toLocaleString('uz-UZ')}</TableCell>
+                          <TableCell>{String(p.session_code || '—')}</TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="outline" onClick={() => selectPaper(p)}>
+                              Tanlash
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </>
         )}
 
         {activeSession && (
@@ -130,9 +234,7 @@ export default function CuttingPage() {
                   <Button onClick={handleAddProduct} className="w-full"><Plus className="h-4 w-4 mr-1" />O&apos;ram</Button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button variant="default" onClick={handleFinish}><CheckCircle className="h-4 w-4 mr-1" />Kesishni tugatish</Button>
-              </div>
+              <Button variant="default" onClick={handleFinish}><CheckCircle className="h-4 w-4 mr-1" />Kesishni tugatish</Button>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -160,7 +262,9 @@ export default function CuttingPage() {
         <Card>
           <CardHeader><CardTitle>Tarix</CardTitle></CardHeader>
           <CardContent className="p-0">
-            {loading ? <div className="p-8 flex justify-center"><Loader2 className="animate-spin" /></div> : (
+            {loading ? (
+              <div className="p-8 flex justify-center"><Loader2 className="animate-spin" /></div>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
