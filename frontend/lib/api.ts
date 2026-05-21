@@ -253,8 +253,25 @@ class ApiClient {
     color?: string;
     lengthM?: number;
     qrCode?: string;
+    cutProductId?: string;
   }) {
-    return this.request('/warehouse/products', { method: 'POST', body: JSON.stringify(body) });
+    return this.request<Record<string, unknown>>('/warehouse/products', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async registerWarehouseFromScan(body: {
+    qrCode: string;
+    weightKg: number;
+    widthCm: number;
+    color?: string;
+    lengthM?: number;
+  }) {
+    return this.request<Record<string, unknown>>('/warehouse/products/scan', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
   }
 
   async deleteWarehouseProduct(id: string) {

@@ -31,7 +31,13 @@ warehouseRouter.post('/products', checkPermission('warehouse:manage'), validate(
 }));
 
 warehouseRouter.post('/products/scan', checkPermission('warehouse:manage'), validate(z.object({
-  body: z.object({ qrCode: z.string(), color: z.string().optional() }),
+  body: z.object({
+    qrCode: z.string(),
+    color: z.string().optional(),
+    weightKg: z.number().positive().optional(),
+    widthCm: z.number().positive().optional(),
+    lengthM: z.number().optional(),
+  }),
 })), asyncHandler(async (req, res) => {
   res.json(await svc.registerFromQr(req.validated.body.qrCode, req.validated.body));
 }));
