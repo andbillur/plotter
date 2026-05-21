@@ -16,8 +16,6 @@ import {
   Users,
   Settings,
   LogOut,
-  Menu,
-  X,
   Droplets,
   Truck,
   Boxes,
@@ -45,6 +43,7 @@ export function Sidebar() {
   const logout = useAuthStore((state) => state.logout);
   const sidebarOpen = useUIStore((state) => state.sidebarOpen);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+  const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
 
   if (!user) return null;
 
@@ -62,12 +61,6 @@ export function Sidebar() {
 
   return (
     <>
-      <div className="lg:hidden fixed top-4 left-4 z-50">
-        <Button variant="outline" size="icon" onClick={toggleSidebar}>
-          {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-        </Button>
-      </div>
-
       <aside
         className={`fixed left-0 top-0 h-screen w-64 bg-slate-900 text-white transition-all duration-300 z-40 lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -86,10 +79,10 @@ export function Sidebar() {
                 pathname === item.href ||
                 (item.href !== '/dashboard' && pathname.startsWith(item.href));
               return (
-                <Link key={item.id} href={item.href}>
+                <Link key={item.id} href={item.href} onClick={() => setSidebarOpen(false)}>
                   <button
                     type="button"
-                    className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors touch-manipulation min-h-[44px] ${
                       isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-800'
                     }`}
                   >

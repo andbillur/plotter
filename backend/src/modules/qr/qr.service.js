@@ -42,6 +42,31 @@ export async function scan(qrCode, roleName) {
     return buildResponse(type, data, roleName, allowedActions);
   }
 
+  const ps = await db.query(
+    `SELECT * FROM production_sessions WHERE session_code = $1`,
+    [qrCode]
+  );
+  if (ps.rows.length) {
+    const papers = await db.query(
+      `SELECT id, qr_code, weight_kg, is_cut FROM parent_papers
+       WHERE source_session_id = $1 ORDER BY created_at`,
+      [ps.rows[0].id]
+    );
+    const available = papers.rows.filter((p) => !p.is_cut);
+    return {
+      type: 'production_session',
+      id: ps.rows[0].id,
+      data: ps.rows[0],
+      parentPapers: papers.rows,
+      parentPapersAvailable: available,
+      allowedActions: [],
+      hint:
+        available.length > 0
+          ? 'Ishlab chiqarish sessiyasi (PS). Kesish uchun PP- kodini tanlang.'
+          : 'Ishlab chiqarish sessiyasi (PS). Avval SPLIT qiling (Ishlab chiqarish sahifasi).',
+    };
+  }
+
   throw new AppError('QR kod topilmadi', 404);
 }
 

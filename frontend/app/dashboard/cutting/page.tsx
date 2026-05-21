@@ -58,19 +58,56 @@ export default function CuttingPage() {
   };
 
   const handleScanPaper = async (code: string) => {
-    setPpQr(code);
+    const trimmed = code.trim();
+    setPpQr(trimmed);
+
+    if (/^PS-/i.test(trimmed)) {
+      try {
+        const p = await apiClient.scanQr(trimmed);
+        if (p.type === 'production_session') {
+          const avail = (p as { parentPapersAvailable?: Record<string, unknown>[] }).parentPapersAvailable;
+          if (avail && avail.length > 0) {
+            selectPaper(avail[0]);
+            toast.success(`PS emas, PP tanlandi: ${avail[0].qr_code}`);
+          } else {
+            toast.error('Bu PS sessiya. Ishlab chiqarish → SPLIT qiling (PP- kod chiqadi)', { duration: 6000 });
+          }
+          return;
+        }
+      } catch {
+        toast.error('Bu PS (ishlab chiqarish) kodi. Avval SPLIT qiling — faqat PP-... ishlaydi', { duration: 6000 });
+        return;
+      }
+    }
+
+    if (/^BOB-/i.test(trimmed)) {
+      toast.error('Bu bobin kodi. Kesish uchun PP-... (ona qog\'oz) skanerlang', { duration: 5000 });
+      return;
+    }
+
     try {
-      const p = await apiClient.scanQr(code);
+      const p = await apiClient.scanQr(trimmed);
       if (p.type === 'parent_paper') {
         const d = p.data;
-        setSelectedPaper(d);
-        setInputKg(String(d.weight_kg));
+        if (d.is_cut) {
+          toast.error('Bu ona qog\'oz allaqachon kesilgan');
+          return;
+        }
+        selectPaper(d);
         toast.success('Ona qog\'oz topildi');
+      } else if (p.type === 'production_session') {
+        const avail = (p as { parentPapersAvailable?: Record<string, unknown>[] }).parentPapersAvailable;
+        if (avail?.length) {
+          selectPaper(avail[0]);
+          toast.success(`PP tanlandi: ${avail[0].qr_code}`);
+        } else {
+          toast.error((p as { hint?: string }).hint || 'Avval SPLIT qiling');
+        }
       } else {
-        toast.error('Bu ona qog\'oz QR emas');
+        toast.error(`Bu ${p.type} — faqat PP-... (ona qog\'oz)`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Topilmadi');
+      toast.error(err instanceof Error ? err.message : 'Topilmadi. Kod PP-... bilan boshlanishi kerak');
     }
   };
 
@@ -132,10 +169,13 @@ export default function CuttingPage() {
           <CardContent className="pt-4 text-sm text-blue-900 space-y-2">
             <p className="font-semibold flex items-center gap-2"><Info className="h-4 w-4" />Ona qog&apos;oz kodi qayerdan?</p>
             <ol className="list-decimal list-inside space-y-1 text-blue-800">
-              <li>Ishlab chiqarish FINISH dan keyin operator <strong>ona qog&apos;oz SPLIT</strong> qiladi — har bo&aposlak uchun <strong>PP-...</strong> QR yaratiladi</li>
-              <li>Etiketdagi QR ni skanerlang yoki quyidagi ro&apos;yxatdan tanlang</li>
-              <li>Kesishda shu kod bilan sessiya ochiladi</li>
+              <li>Ishlab chiqarish FINISH dan keyin <strong>SPLIT</strong> — har bo&aposlak uchun <strong className="text-red-700">PP-...</strong> QR (PS-... emas!)</li>
+              <li>Etiketdagi <strong>PP-</strong> kodini skanerlang yoki ro&apos;yxatdan tanlang</li>
+              <li>Kesishda shu PP kod bilan boshlang</li>
             </ol>
+            <p className="text-xs font-mono bg-white/60 p-2 rounded border border-blue-200">
+              ❌ PS-20250520-001 — ishlab chiqarish · ✅ PP-20250520-001 — ona qog&apos;oz (kesish)
+            </p>
           </CardContent>
         </Card>
 
@@ -148,7 +188,7 @@ export default function CuttingPage() {
               <CardContent className="space-y-4">
                 <BarcodeScanner
                   label="Ona qog'oz barcode / QR"
-                  placeholder="PP-... yoki skaner"
+                  placeholder="PP-... (ona qogoz) — PS- emas!"
                   onScan={handleScanPaper}
                 />
                 {selectedPaper && (

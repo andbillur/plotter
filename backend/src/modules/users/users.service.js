@@ -51,6 +51,10 @@ export async function update(id, data) {
     fields.push(`role_id = $${i++}`);
     vals.push(role.rows[0].id);
   }
+  if (data.isActive !== undefined) {
+    fields.push(`is_active = $${i++}`);
+    vals.push(data.isActive);
+  }
   if (!fields.length) throw new AppError('Yangilash uchun ma\'lumot yo\'q', 400);
   fields.push('updated_at = NOW()');
   vals.push(id);

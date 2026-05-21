@@ -38,6 +38,7 @@ usersRouter.patch('/:id', checkPermission('users:manage'), validate(z.object({
     fullName: z.string().optional(),
     phone: z.string().optional(),
     roleName: z.string().optional(),
+    isActive: z.boolean().optional(),
   }),
 })), asyncHandler(async (req, res) => {
   res.json(await svc.update(req.params.id, req.validated.body));

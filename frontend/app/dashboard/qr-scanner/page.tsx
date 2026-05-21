@@ -24,6 +24,8 @@ export default function QRScannerPage() {
     type: string;
     data: Record<string, unknown>;
     allowedActions: string[];
+    hint?: string;
+    parentPapersAvailable?: Record<string, unknown>[];
   } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -103,6 +105,23 @@ export default function QRScannerPage() {
                   <p>
                     <strong>Og&apos;irlik:</strong> {Number(result.data.weight_kg)} kg
                   </p>
+                </>
+              )}
+              {result.type === 'production_session' && (
+                <>
+                  <p>
+                    <strong>Sessiya:</strong> {String(result.data.session_code)}
+                  </p>
+                  <p className="text-amber-800">
+                    {result.hint || 'Bu PS kodi — kesish uchun PP- kerak'}
+                  </p>
+                  {(result.parentPapersAvailable?.length ?? 0) > 0 && (
+                    <ul className="list-disc list-inside font-mono text-sm">
+                      {result.parentPapersAvailable!.map((p) => (
+                        <li key={String(p.id)}>{String(p.qr_code)} — {Number(p.weight_kg)} kg</li>
+                      ))}
+                    </ul>
+                  )}
                 </>
               )}
               {result.type === 'cut_product' && (

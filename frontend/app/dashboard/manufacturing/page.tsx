@@ -28,7 +28,8 @@ export default function ManufacturingPage() {
   const [machineId, setMachineId] = useState('');
   const [finishForm, setFinishForm] = useState({ outputWeightKg: '', bobinRemainingWeightKg: '' });
   const [splitSessionId, setSplitSessionId] = useState('');
-  const [splitWeights, setSplitWeights] = useState('540,540,540');
+  const [splitWeights, setSplitWeights] = useState('200,200,200');
+  const [lastSplitPapers, setLastSplitPapers] = useState<Record<string, unknown>[]>([]);
 
   const load = useCallback(() => {
     Promise.all([
@@ -49,6 +50,18 @@ export default function ManufacturingPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const finished = sessions.filter((s) => s.status === 'tugallangan');
+    if (!finished.length || splitSessionId) return;
+    const s = finished[0];
+    setSplitSessionId(String(s.id));
+    const out = Number(s.output_weight_kg);
+    if (out > 0) {
+      const each = Math.round((out / 3) * 10) / 10;
+      setSplitWeights(Array(3).fill(each).join(','));
+    }
+  }, [sessions, splitSessionId]);
 
   const handleScanBobin = async (code: string) => {
     setBobinQr(code);
@@ -126,7 +139,8 @@ export default function ManufacturingPage() {
         sessionId: splitSessionId,
         children: weights.map((weightKg) => ({ weightKg })),
       });
-      toast.success(`${created.length} ta ona qog\'oz — QR: ${created.map((c: { qr_code: string }) => c.qr_code).join(', ')}`);
+      setLastSplitPapers(created);
+      toast.success(`${created.length} ta ona qog\'oz yaratildi — Kesish sahifasida PP kodlarini ishlating`, { duration: 8000 });
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Xatolik');
@@ -240,12 +254,24 @@ export default function ManufacturingPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-slate-600">FINISH qilingan sessiyani bo&apos;laklarga bo&apos;ling — har biri uchun <strong>PP-...</strong> QR chiqadi.</p>
-            <Select value={splitSessionId} onValueChange={setSplitSessionId}>
+            <Select
+              value={splitSessionId}
+              onValueChange={(id) => {
+                setSplitSessionId(id);
+                const s = finishedSessions.find((x) => String(x.id) === id);
+                if (s?.output_weight_kg) {
+                  const out = Number(s.output_weight_kg);
+                  const n = 3;
+                  const each = Math.round((out / n) * 10) / 10;
+                  setSplitWeights(Array(n).fill(each).join(','));
+                }
+              }}
+            >
               <SelectTrigger><SelectValue placeholder="Tugallangan sessiya" /></SelectTrigger>
               <SelectContent>
                 {finishedSessions.map((s) => (
                   <SelectItem key={String(s.id)} value={String(s.id)}>
-                    {String(s.session_code)} — {Number(s.output_weight_kg).toLocaleString('uz-UZ')} kg
+                    {String(s.session_code)} — {Number(s.output_weight_kg).toLocaleString('uz-UZ')} kg chiqish
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -254,7 +280,21 @@ export default function ManufacturingPage() {
               <Label>Bo&apos;lak og&apos;irliklari (kg), vergul bilan</Label>
               <Input placeholder="540,540,540" value={splitWeights} onChange={(e) => setSplitWeights(e.target.value)} />
             </div>
-            <Button onClick={handleSplit}><Plus className="h-4 w-4 mr-1" />SPLIT qilish</Button>
+            <Button onClick={handleSplit} disabled={!splitSessionId}>
+              <Plus className="h-4 w-4 mr-1" />SPLIT qilish
+            </Button>
+            {lastSplitPapers.length > 0 && (
+              <div className="rounded-lg border-2 border-green-400 bg-green-50 p-4 space-y-2">
+                <p className="font-semibold text-green-900">Yaratilgan ona qog&apos;oz QR (kesish uchun):</p>
+                {lastSplitPapers.map((p) => (
+                  <div key={String(p.id)} className="flex justify-between items-center font-mono text-sm bg-white p-2 rounded">
+                    <span className="font-bold text-green-800">{String(p.qr_code)}</span>
+                    <span>{Number(p.weight_kg).toLocaleString('uz-UZ')} kg</span>
+                  </div>
+                ))}
+                <p className="text-xs text-green-700">Bu kodlarni etiketga yoping, keyin Kesish sahifasida skanerlang.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

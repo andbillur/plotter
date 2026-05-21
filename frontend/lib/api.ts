@@ -301,6 +301,44 @@ class ApiClient {
     return this.request<PaginatedResponse<Record<string, unknown>>>(`/users${q}`);
   }
 
+  async getUserRoles() {
+    return this.request<{ roles: { id: string; name: string; display_name: string }[] }>('/users/roles');
+  }
+
+  async createUser(body: {
+    fullName: string;
+    username: string;
+    password: string;
+    roleName: string;
+    phone?: string;
+  }) {
+    return this.request<Record<string, unknown>>('/users', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async updateUser(
+    id: string,
+    body: { fullName?: string; phone?: string; roleName?: string; isActive?: boolean }
+  ) {
+    return this.request<Record<string, unknown>>(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async deleteUser(id: string) {
+    return this.request<{ ok: boolean }>(`/users/${id}`, { method: 'DELETE' });
+  }
+
+  async changeUserPassword(id: string, password: string) {
+    return this.request<{ ok: boolean }>(`/users/${id}/password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ password }),
+    });
+  }
+
   // QR
   async scanQr(qrCode: string) {
     return this.request<{
@@ -308,6 +346,9 @@ class ApiClient {
       id: string;
       data: Record<string, unknown>;
       allowedActions: string[];
+      hint?: string;
+      parentPapersAvailable?: Record<string, unknown>[];
+      parentPapers?: Record<string, unknown>[];
     }>(`/qr/scan/${encodeURIComponent(qrCode)}`);
   }
 }

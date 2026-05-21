@@ -3,23 +3,58 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Camera, CameraOff, Keyboard } from 'lucide-react';
+import { Camera, CameraOff, ScanLine, Keyboard } from 'lucide-react';
 import jsQR from 'jsqr';
+import { cn } from '@/lib/utils';
 
 type Props = {
   onScan: (code: string) => void;
   placeholder?: string;
   label?: string;
+  value?: string;
+  onValueChange?: (code: string) => void;
+  /** BOB-, PP- va h.k. — skaner natijasini normalizatsiya */
+  codePrefix?: string;
 };
 
-export function BarcodeScanner({ onScan, placeholder = 'Kod kiriting yoki skanerlang...', label }: Props) {
+export function BarcodeScanner({
+  onScan,
+  placeholder = 'Kod kiriting yoki skanerlang...',
+  label,
+  value: controlledValue,
+  onValueChange,
+  codePrefix,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraOn, setCameraOn] = useState(false);
-  const [manual, setManual] = useState('');
+  const [internal, setInternal] = useState('');
+  const [mode, setMode] = useState<'scan' | 'manual'>('scan');
   const [error, setError] = useState('');
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number>(0);
+
+  const manual = controlledValue !== undefined ? controlledValue : internal;
+  const setManual = (v: string) => {
+    if (onValueChange) onValueChange(v);
+    else setInternal(v);
+  };
+
+  const normalize = (raw: string) => {
+    let code = raw.trim();
+    if (!code) return '';
+    if (codePrefix && !code.toUpperCase().startsWith(codePrefix.toUpperCase())) {
+      code = `${codePrefix}${code.replace(/^#+/, '')}`;
+    }
+    return code;
+  };
+
+  const applyCode = (raw: string) => {
+    const code = normalize(raw);
+    if (!code) return;
+    setManual(code);
+    onScan(code);
+  };
 
   const stopCamera = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -30,9 +65,11 @@ export function BarcodeScanner({ onScan, placeholder = 'Kod kiriting yoki skaner
 
   const startCamera = async () => {
     setError('');
+    setMode('scan');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
       });
       streamRef.current = stream;
       if (videoRef.current) {
@@ -42,7 +79,8 @@ export function BarcodeScanner({ onScan, placeholder = 'Kod kiriting yoki skaner
       setCameraOn(true);
       scanLoop();
     } catch {
-      setError('Kameraga ruxsat bering yoki qo\'lda kiriting');
+      setError('Kameraga ruxsat bering yoki «Qo\'lda» rejimidan foydalaning');
+      setMode('manual');
     }
   };
 
@@ -61,7 +99,7 @@ export function BarcodeScanner({ onScan, placeholder = 'Kod kiriting yoki skaner
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height);
       if (code?.data) {
-        onScan(code.data.trim());
+        applyCode(code.data);
         stopCamera();
         return;
       }
@@ -71,52 +109,96 @@ export function BarcodeScanner({ onScan, placeholder = 'Kod kiriting yoki skaner
 
   useEffect(() => () => stopCamera(), []);
 
-  const submitManual = () => {
-    const v = manual.trim();
-    if (v) {
-      onScan(v);
-      setManual('');
-    }
-  };
+  const submitManual = () => applyCode(manual);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 w-full">
       {label && <p className="text-sm font-medium text-slate-700">{label}</p>}
-      <div className="flex flex-wrap gap-2">
-        {!cameraOn ? (
-          <Button type="button" variant="outline" size="sm" onClick={startCamera}>
-            <Camera className="h-4 w-4 mr-1" />
-            Kamera (barcode)
-          </Button>
-        ) : (
-          <Button type="button" variant="outline" size="sm" onClick={stopCamera}>
-            <CameraOff className="h-4 w-4 mr-1" />
-            Kamerani yopish
-          </Button>
-        )}
+
+      <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-lg">
+        <button
+          type="button"
+          onClick={() => {
+            setMode('scan');
+            if (!cameraOn) startCamera();
+          }}
+          className={cn(
+            'flex items-center justify-center gap-2 py-3 rounded-md text-sm font-medium touch-manipulation min-h-[44px]',
+            mode === 'scan' ? 'bg-white shadow text-slate-900' : 'text-slate-600'
+          )}
+        >
+          <ScanLine className="h-4 w-4 shrink-0" />
+          Skaner
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMode('manual');
+            stopCamera();
+          }}
+          className={cn(
+            'flex items-center justify-center gap-2 py-3 rounded-md text-sm font-medium touch-manipulation min-h-[44px]',
+            mode === 'manual' ? 'bg-white shadow text-slate-900' : 'text-slate-600'
+          )}
+        >
+          <Keyboard className="h-4 w-4 shrink-0" />
+          Qo&apos;lda
+        </button>
       </div>
-      {cameraOn && (
-        <div className="relative rounded-lg overflow-hidden border bg-black max-w-sm">
-          <video ref={videoRef} className="w-full" playsInline muted />
-          <canvas ref={canvasRef} className="hidden" />
-          <p className="absolute bottom-2 left-2 right-2 text-center text-xs text-white bg-black/50 rounded py-1">
-            QR/barcode ni ramkaga tuting
-          </p>
+
+      {mode === 'scan' && (
+        <div className="space-y-2">
+          {!cameraOn ? (
+            <Button
+              type="button"
+              variant="default"
+              className="w-full min-h-[48px] text-base"
+              onClick={startCamera}
+            >
+              <Camera className="h-5 w-5 mr-2" />
+              Kamerani ochish
+            </Button>
+          ) : (
+            <>
+              <div className="relative rounded-xl overflow-hidden border-2 border-slate-300 bg-black w-full aspect-[4/3] max-h-[min(70vh,420px)]">
+                <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="absolute inset-8 border-2 border-white/70 rounded-lg pointer-events-none" />
+                <p className="absolute bottom-3 left-3 right-3 text-center text-xs text-white bg-black/60 rounded-lg py-2 px-2">
+                  QR yoki barcode ni ramkaga tuting
+                </p>
+              </div>
+              <Button type="button" variant="outline" className="w-full min-h-[44px]" onClick={stopCamera}>
+                <CameraOff className="h-4 w-4 mr-2" />
+                Kamerani yopish
+              </Button>
+            </>
+          )}
         </div>
       )}
-      {error && <p className="text-sm text-amber-700">{error}</p>}
-      <div className="flex gap-2">
-        <Input
-          placeholder={placeholder}
-          value={manual}
-          onChange={(e) => setManual(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), submitManual())}
-          className="font-mono text-sm"
-        />
-        <Button type="button" variant="secondary" size="icon" onClick={submitManual} title="Qo'lda">
-          <Keyboard className="h-4 w-4" />
-        </Button>
-      </div>
+
+      {mode === 'manual' && (
+        <div className="space-y-2">
+          <Input
+            placeholder={placeholder}
+            value={manual}
+            onChange={(e) => setManual(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), submitManual())}
+            className="font-mono text-base min-h-[48px] h-12"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoComplete="off"
+          />
+          <Button type="button" className="w-full min-h-[48px] text-base" onClick={submitManual}>
+            Kodni qo&apos;llash
+          </Button>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2">{error}</p>}
+      {manual && mode === 'scan' && (
+        <p className="text-xs font-mono text-slate-500 truncate">Tanlangan: {manual}</p>
+      )}
     </div>
   );
 }

@@ -28,12 +28,12 @@ export function Header() {
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-20">
+    <header className="bg-white border-b border-slate-200 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-20 safe-area-inset-top">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={toggleSidebar} className="lg:hidden">
-          <Menu className="h-5 w-5" />
+        <Button variant="ghost" size="icon" onClick={toggleSidebar} className="lg:hidden min-h-[44px] min-w-[44px]">
+          <Menu className="h-6 w-6" />
         </Button>
-        <h2 className="text-lg font-semibold text-slate-800">Plotter CRM</h2>
+        <h2 className="text-base sm:text-lg font-semibold text-slate-800 truncate">Plotter CRM</h2>
       </div>
 
       <div className="flex items-center gap-4">
