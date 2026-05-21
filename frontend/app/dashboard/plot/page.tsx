@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { apiClient } from '@/lib/api';
+import { PrintQrButton } from '@/components/PrintQrButton';
 import { Plus, Lock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -121,7 +122,17 @@ export default function PlotPage() {
                 <TableBody>
                   {items.map((p) => (
                     <TableRow key={String(p.id)}>
-                      <TableCell className="font-mono text-xs">{String(p.qr_code)}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <span className="inline-flex items-center gap-1">
+                          {String(p.qr_code)}
+                          <PrintQrButton
+                            code={String(p.qr_code)}
+                            title="PLOT"
+                            lines={[`${p.weight_kg} kg`, String(p.color || 'white')]}
+                            size="icon"
+                          />
+                        </span>
+                      </TableCell>
                       <TableCell>{p.weight_kg}</TableCell>
                       <TableCell>{String(p.color || 'white')}</TableCell>
                     </TableRow>

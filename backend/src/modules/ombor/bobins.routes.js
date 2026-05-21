@@ -21,7 +21,7 @@ bobinsRouter.get('/', checkPermission('bobin:read'), asyncHandler(async (req, re
   res.json(await svc.list(req.query));
 }));
 
-bobinsRouter.post('/', checkPermission('bobin:create'), validate(z.object({
+bobinsRouter.post('/', checkSuperAdmin, validate(z.object({
   body: z.object({
     qrCode: z.string().optional(),
     grammaj: z.number().positive(),

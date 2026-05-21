@@ -13,7 +13,7 @@ clayRouter.get('/balance', checkPermission('clay:read'), asyncHandler(async (_re
   res.json(await svc.getBalance());
 }));
 
-clayRouter.post('/receive', checkPermission('clay:create'), validate(z.object({
+clayRouter.post('/receive', checkSuperAdmin, validate(z.object({
   body: z.object({
     quantityBags: z.number().int().positive().optional(),
     quantityKg: z.number().positive().optional(),

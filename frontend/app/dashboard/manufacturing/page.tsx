@@ -11,6 +11,7 @@ import { RoleGuard } from '@/components/layout/RoleGuard';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { apiClient } from '@/lib/api';
 import { sessionStatusLabels } from '@/lib/constants';
+import { PrintQrButton } from '@/components/PrintQrButton';
 import { Play, Square, Droplets, Loader2, Scissors, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -287,9 +288,14 @@ export default function ManufacturingPage() {
               <div className="rounded-lg border-2 border-green-400 bg-green-50 p-4 space-y-2">
                 <p className="font-semibold text-green-900">Yaratilgan ona qog&apos;oz QR (kesish uchun):</p>
                 {lastSplitPapers.map((p) => (
-                  <div key={String(p.id)} className="flex justify-between items-center font-mono text-sm bg-white p-2 rounded">
+                  <div key={String(p.id)} className="flex flex-wrap justify-between items-center gap-2 font-mono text-sm bg-white p-2 rounded">
                     <span className="font-bold text-green-800">{String(p.qr_code)}</span>
                     <span>{Number(p.weight_kg).toLocaleString('uz-UZ')} kg</span>
+                    <PrintQrButton
+                      code={String(p.qr_code)}
+                      title="Ona qog'oz"
+                      lines={[`${Number(p.weight_kg)} kg`]}
+                    />
                   </div>
                 ))}
                 <p className="text-xs text-green-700">Bu kodlarni etiketga yoping, keyin Kesish sahifasida skanerlang.</p>

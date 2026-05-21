@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 export default function ClayPage() {
   const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin());
+  const canAddClay = isSuperAdmin;
   const [balance, setBalance] = useState<{ current_stock_kg: number; bag_weight_kg: number } | null>(null);
   const [transactions, setTransactions] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,21 +66,23 @@ export default function ClayPage() {
             <h1 className="text-3xl font-bold">Kley ombori</h1>
             <p className="text-slate-600">Elim zaxirasi</p>
           </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />Kley kirim</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Kley kirim (qop)</DialogTitle></DialogHeader>
-              <form onSubmit={handleReceive} className="space-y-4">
-                <div>
-                  <Label>Qop soni (har biri ~{balance?.bag_weight_kg || 20} kg)</Label>
-                  <Input type="number" min="1" value={bags} onChange={(e) => setBags(e.target.value)} />
-                </div>
-                <Button type="submit" className="w-full">Kirim qilish</Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          {canAddClay && (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="h-4 w-4 mr-2" />Kley kirim</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Kley kirim (qop)</DialogTitle></DialogHeader>
+                <form onSubmit={handleReceive} className="space-y-4">
+                  <div>
+                    <Label>Qop soni (har biri ~{balance?.bag_weight_kg || 20} kg)</Label>
+                    <Input type="number" min="1" value={bags} onChange={(e) => setBags(e.target.value)} />
+                  </div>
+                  <Button type="submit" className="w-full">Kirim qilish</Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
 
         <Card>

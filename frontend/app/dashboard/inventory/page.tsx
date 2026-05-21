@@ -26,6 +26,7 @@ import { apiClient } from '@/lib/api';
 import { bobinStatusLabels } from '@/lib/constants';
 import { useAuthStore } from '@/lib/store';
 import type { Bobin } from '@/lib/types';
+import { PrintQrButton } from '@/components/PrintQrButton';
 import { Search, Loader2, Plus, Package, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -56,12 +57,12 @@ const emptyForm = {
 };
 
 export default function InventoryPage() {
-  const canCreate = useAuthStore((s) => s.hasPermission('bobin:create'));
   const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin());
   const [bobins, setBobins] = useState<Bobin[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [lastCreated, setLastCreated] = useState<{ qr: string; grammaj: number; color: string } | null>(null);
   const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(() => {
@@ -95,8 +96,8 @@ export default function InventoryPage() {
       };
       if (form.qrCode.trim()) body.qrCode = form.qrCode.trim();
       const created = await apiClient.createBobin(body);
+      setLastCreated({ qr: created.qr_code, grammaj: created.grammaj, color: created.color });
       toast.success(`Bobin qo'shildi: ${created.qr_code}`);
-      setOpen(false);
       setForm(emptyForm);
       load();
     } catch (err) {
@@ -222,7 +223,7 @@ export default function InventoryPage() {
             <h1 className="text-2xl sm:text-3xl font-bold">Bobinlar</h1>
             <p className="text-slate-600 mt-1 text-sm">Xomashyo — qog&apos;oz rulonlari</p>
           </div>
-          {canCreate && (
+          {isSuperAdmin && (
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button className="w-full sm:w-auto min-h-[48px] text-base">
@@ -235,6 +236,16 @@ export default function InventoryPage() {
                   <DialogTitle>Yangi bobin qabul qilish</DialogTitle>
                 </DialogHeader>
                 {BobinForm}
+                {lastCreated && (
+                  <div className="rounded-lg border border-green-300 bg-green-50 p-3 flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono font-bold text-sm">{lastCreated.qr}</span>
+                    <PrintQrButton
+                      code={lastCreated.qr}
+                      title="Bobin"
+                      lines={[`${lastCreated.grammaj} g/m²`, lastCreated.color]}
+                    />
+                  </div>
+                )}
               </DialogContent>
             </Dialog>
           )}
@@ -268,8 +279,16 @@ export default function InventoryPage() {
                 <Card key={b.id} className="overflow-hidden">
                   <CardContent className="p-4 space-y-2">
                     <div className="flex justify-between items-start gap-2">
-                      <p className="font-mono text-sm font-bold break-all">{b.qr_code}</p>
-                      <Badge className="shrink-0">{bobinStatusLabels[b.status] || b.status}</Badge>
+                      <p className="font-mono text-sm font-bold break-all flex-1">{b.qr_code}</p>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <PrintQrButton
+                          code={b.qr_code}
+                          title="Bobin"
+                          lines={[`${b.grammaj} g/m²`, b.color, `${b.current_weight_kg} kg`]}
+                          size="icon"
+                        />
+                        <Badge>{bobinStatusLabels[b.status] || b.status}</Badge>
+                      </div>
                     </div>
                     {isSuperAdmin && b.status === 'omborxonada' && (
                       <Button
@@ -319,7 +338,17 @@ export default function InventoryPage() {
                   <TableBody>
                     {filtered.map((b) => (
                       <TableRow key={b.id}>
-                        <TableCell className="font-mono text-xs">{b.qr_code}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          <span className="inline-flex items-center gap-1">
+                            {b.qr_code}
+                            <PrintQrButton
+                              code={b.qr_code}
+                              title="Bobin"
+                              lines={[`${b.grammaj} g/m²`, `${b.current_weight_kg} kg`]}
+                              size="icon"
+                            />
+                          </span>
+                        </TableCell>
                         <TableCell>{b.grammaj}</TableCell>
                         <TableCell>{b.color}</TableCell>
                         <TableCell>{Number(b.current_weight_kg).toLocaleString('uz-UZ')}</TableCell>

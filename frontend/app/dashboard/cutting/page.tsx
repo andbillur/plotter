@@ -9,6 +9,7 @@ import { RoleGuard } from '@/components/layout/RoleGuard';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { apiClient } from '@/lib/api';
 import { sessionStatusLabels } from '@/lib/constants';
+import { PrintQrButton } from '@/components/PrintQrButton';
 import { Play, Plus, CheckCircle, Loader2, Info, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -232,10 +233,15 @@ export default function CuttingPage() {
                     <TableBody>
                       {availablePapers.map((p) => (
                         <TableRow key={String(p.id)} className={selectedPaper?.id === p.id ? 'bg-green-50' : ''}>
-                          <TableCell className="font-mono text-xs">{String(p.qr_code)}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            <span className="inline-flex items-center gap-1">
+                              {String(p.qr_code)}
+                              <PrintQrButton code={String(p.qr_code)} title="Ona qog'oz" lines={[`${p.weight_kg} kg`]} size="icon" />
+                            </span>
+                          </TableCell>
                           <TableCell>{Number(p.weight_kg).toLocaleString('uz-UZ')}</TableCell>
                           <TableCell>{String(p.session_code || '—')}</TableCell>
-                          <TableCell>
+                          <TableCell className="flex gap-1">
                             <Button size="sm" variant="outline" onClick={() => selectPaper(p)}>
                               Tanlash
                             </Button>
@@ -287,7 +293,17 @@ export default function CuttingPage() {
                 <TableBody>
                   {products.map((p) => (
                     <TableRow key={String(p.id)}>
-                      <TableCell className="font-mono text-xs">{String(p.qr_code)}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <span className="inline-flex items-center gap-1">
+                          {String(p.qr_code)}
+                          <PrintQrButton
+                            code={String(p.qr_code)}
+                            title="Kesilgan o'ram"
+                            lines={[`${p.width_cm} sm`, `${p.weight_kg} kg`, String(p.color)]}
+                            size="icon"
+                          />
+                        </span>
+                      </TableCell>
                       <TableCell>{p.width_cm} sm</TableCell>
                       <TableCell>{p.weight_kg}</TableCell>
                       <TableCell>{String(p.color)}</TableCell>

@@ -16,6 +16,7 @@ import { RoleGuard } from '@/components/layout/RoleGuard';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { PrintQrButton } from '@/components/PrintQrButton';
 import { Plus, Loader2, Trash2, Scale, ScanLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -47,6 +48,7 @@ export default function WarehousePage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [knownProduct, setKnownProduct] = useState<Record<string, unknown> | null>(null);
+  const [lastSaved, setLastSaved] = useState<{ qr: string; kg: number; width: number; color: string } | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -138,6 +140,12 @@ export default function WarehousePage() {
         lengthM: form.lengthM ? parseFloat(form.lengthM) : undefined,
       };
       const p = await apiClient.registerWarehouseProduct(body);
+      setLastSaved({
+        qr: String(p.qr_code),
+        kg: weightKg,
+        width: widthCm,
+        color: form.color,
+      });
       toast.success(`Omborga: ${String(p.qr_code)} — ${weightKg} kg`);
       load();
       if (andNext) resetEntry(true);
@@ -193,15 +201,27 @@ export default function WarehousePage() {
                 />
 
                 {form.qrCode && (
-                  <p className="text-xs font-mono bg-white rounded border px-2 py-1 break-all">
-                    <ScanLine className="inline h-3 w-3 mr-1" />
-                    {form.qrCode}
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-mono bg-white rounded border px-2 py-2 break-all">
+                    <ScanLine className="inline h-3 w-3 shrink-0" />
+                    <span className="flex-1">{form.qrCode}</span>
+                    <PrintQrButton code={form.qrCode} title="Tayyor mahsulot" size="sm" />
                     {knownProduct ? (
-                      <span className="text-emerald-700 ml-2">(kesishdan kelgan)</span>
+                      <span className="text-emerald-700 w-full">(kesishdan kelgan)</span>
                     ) : (
-                      <span className="text-slate-500 ml-2">(yangi etiket)</span>
+                      <span className="text-slate-500 w-full">(yangi etiket)</span>
                     )}
-                  </p>
+                  </div>
+                )}
+
+                {lastSaved && (
+                  <div className="rounded-lg border border-green-300 bg-green-50 p-3 flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-sm font-bold">{lastSaved.qr}</span>
+                    <PrintQrButton
+                      code={lastSaved.qr}
+                      title="Tayyor mahsulot"
+                      lines={[`${lastSaved.width} sm`, `${lastSaved.kg} kg`, lastSaved.color]}
+                    />
+                  </div>
                 )}
 
                 <div>
@@ -308,7 +328,15 @@ export default function WarehousePage() {
                 <div className="md:hidden divide-y">
                   {products.map((p) => (
                     <div key={String(p.id)} className="p-4 space-y-1">
-                      <p className="font-mono text-sm font-bold break-all">{String(p.qr_code)}</p>
+                      <div className="flex items-start gap-2">
+                        <p className="font-mono text-sm font-bold break-all flex-1">{String(p.qr_code)}</p>
+                        <PrintQrButton
+                          code={String(p.qr_code)}
+                          title="Tayyor mahsulot"
+                          lines={[`${p.width_cm} sm`, `${p.weight_kg} kg`, String(p.color)]}
+                          size="icon"
+                        />
+                      </div>
                       <p className="text-sm">
                         {p.width_cm} sm · {Number(p.weight_kg).toLocaleString('uz-UZ')} kg ·{' '}
                         {String(p.color || 'white')}
@@ -342,7 +370,17 @@ export default function WarehousePage() {
                     <TableBody>
                       {products.map((p) => (
                         <TableRow key={String(p.id)}>
-                          <TableCell className="font-mono text-xs">{String(p.qr_code)}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            <span className="inline-flex items-center gap-1">
+                              {String(p.qr_code)}
+                              <PrintQrButton
+                                code={String(p.qr_code)}
+                                title="Tayyor mahsulot"
+                                lines={[`${p.width_cm} sm`, `${p.weight_kg} kg`]}
+                                size="icon"
+                              />
+                            </span>
+                          </TableCell>
                           <TableCell>{p.width_cm}</TableCell>
                           <TableCell>{Number(p.weight_kg).toLocaleString('uz-UZ')}</TableCell>
                           <TableCell>{String(p.color || 'white')}</TableCell>
