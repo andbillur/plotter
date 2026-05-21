@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { QrCode, CheckCircle, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { bobinStatusLabels } from '@/lib/constants';
+import { bobinStatusLabels, formatBobinWidthMm } from '@/lib/constants';
 import { toast } from 'sonner';
 
 const actionLabels: Record<string, string> = {
@@ -93,7 +93,13 @@ export default function QRScannerPage() {
                     {bobinStatusLabels[String(result.data.status)] || String(result.data.status)}
                   </p>
                   <p>
+                    <strong>Eni:</strong> {formatBobinWidthMm(result.data.width_mm as number)}
+                  </p>
+                  <p>
                     <strong>Og&apos;irlik:</strong> {Number(result.data.current_weight_kg)} kg
+                  </p>
+                  <p>
+                    <strong>Uzunlik:</strong> {Number(result.data.current_length_m)} m
                   </p>
                 </>
               )}

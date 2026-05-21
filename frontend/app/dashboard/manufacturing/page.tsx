@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { apiClient } from '@/lib/api';
-import { sessionStatusLabels } from '@/lib/constants';
+import { sessionStatusLabels, bobinSummaryText, formatBobinWidthMm } from '@/lib/constants';
 import { PrintQrButton } from '@/components/PrintQrButton';
 import { Play, Square, Droplets, Loader2, Scissors, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -169,7 +169,7 @@ export default function ManufacturingPage() {
               {selectedBobin && (
                 <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm">
                   <p className="font-mono font-bold">{selectedBobin.qr_code}</p>
-                  <p>{selectedBobin.grammaj} g/m² — {Number(selectedBobin.current_weight_kg).toLocaleString('uz-UZ')} kg</p>
+                  <p>{bobinSummaryText(selectedBobin)}</p>
                 </div>
               )}
               <div className="flex flex-wrap gap-3 items-end">
@@ -196,7 +196,7 @@ export default function ManufacturingPage() {
                         className="font-mono text-xs"
                         onClick={() => selectBobin(b)}
                       >
-                        {b.qr_code.slice(-8)} · {b.current_weight_kg}kg
+                        {b.qr_code.slice(-8)} · {formatBobinWidthMm(b.width_mm)} · {b.current_weight_kg}kg
                       </Button>
                     ))}
                   </div>

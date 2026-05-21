@@ -37,6 +37,37 @@ export function hasPermission(
   return permissions.includes(code);
 }
 
+/** Bobin eni (mm) — ro'yxat va umumiy infoda */
+export function formatBobinWidthMm(widthMm?: number | string | null): string {
+  if (widthMm == null || widthMm === '') return '—';
+  const n = Number(widthMm);
+  return Number.isFinite(n) ? `${n} mm` : '—';
+}
+
+export function bobinSummaryLines(b: {
+  grammaj?: number | string;
+  width_mm?: number | string | null;
+  current_weight_kg?: number | string;
+  current_length_m?: number | string;
+  color?: string;
+}): string[] {
+  const lines: string[] = [];
+  if (b.grammaj != null && b.grammaj !== '') lines.push(`${b.grammaj} g/m²`);
+  lines.push(`Eni: ${formatBobinWidthMm(b.width_mm)}`);
+  if (b.current_weight_kg != null && b.current_weight_kg !== '') {
+    lines.push(`${Number(b.current_weight_kg).toLocaleString('uz-UZ')} kg`);
+  }
+  if (b.current_length_m != null && b.current_length_m !== '') {
+    lines.push(`${Number(b.current_length_m).toLocaleString('uz-UZ')} m`);
+  }
+  if (b.color) lines.push(String(b.color));
+  return lines;
+}
+
+export function bobinSummaryText(b: Parameters<typeof bobinSummaryLines>[0]): string {
+  return bobinSummaryLines(b).join(' · ');
+}
+
 export const bobinStatusLabels: Record<string, string> = {
   omborxonada: 'Omborda',
   mashinada: 'Mashinada',

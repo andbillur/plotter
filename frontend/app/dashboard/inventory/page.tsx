@@ -23,7 +23,7 @@ import {
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { apiClient } from '@/lib/api';
-import { bobinStatusLabels } from '@/lib/constants';
+import { bobinStatusLabels, bobinSummaryLines, bobinSummaryText, formatBobinWidthMm } from '@/lib/constants';
 import { useAuthStore } from '@/lib/store';
 import type { Bobin } from '@/lib/types';
 import { PrintQrButton } from '@/components/PrintQrButton';
@@ -62,7 +62,12 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [lastCreated, setLastCreated] = useState<{ qr: string; grammaj: number; color: string } | null>(null);
+  const [lastCreated, setLastCreated] = useState<{
+    qr: string;
+    grammaj: number;
+    color: string;
+    width_mm?: number | null;
+  } | null>(null);
   const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(() => {
@@ -96,7 +101,12 @@ export default function InventoryPage() {
       };
       if (form.qrCode.trim()) body.qrCode = form.qrCode.trim();
       const created = await apiClient.createBobin(body);
-      setLastCreated({ qr: created.qr_code, grammaj: created.grammaj, color: created.color });
+      setLastCreated({
+        qr: created.qr_code,
+        grammaj: created.grammaj,
+        color: created.color,
+        width_mm: created.width_mm,
+      });
       toast.success(`Bobin qo'shildi: ${created.qr_code}`);
       setForm(emptyForm);
       load();
@@ -120,6 +130,7 @@ export default function InventoryPage() {
     (b) =>
       b.qr_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       String(b.grammaj).includes(searchTerm) ||
+      String(b.width_mm ?? '').includes(searchTerm) ||
       b.color.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -192,10 +203,12 @@ export default function InventoryPage() {
         </div>
       </div>
       <div>
-        <Label>Eni (mm) — ixtiyoriy</Label>
+        <Label>Eni (mm)</Label>
         <Input
           type="number"
           inputMode="numeric"
+          step="1"
+          placeholder="Masalan: 1600"
           className="min-h-[44px]"
           value={form.widthMm}
           onChange={(e) => setForm({ ...form, widthMm: e.target.value })}
@@ -242,7 +255,7 @@ export default function InventoryPage() {
                     <PrintQrButton
                       code={lastCreated.qr}
                       title="Bobin"
-                      lines={[`${lastCreated.grammaj} g/m²`, lastCreated.color]}
+                      lines={bobinSummaryLines(lastCreated)}
                     />
                   </div>
                 )}
@@ -284,7 +297,7 @@ export default function InventoryPage() {
                         <PrintQrButton
                           code={b.qr_code}
                           title="Bobin"
-                          lines={[`${b.grammaj} g/m²`, b.color, `${b.current_weight_kg} kg`]}
+                          lines={bobinSummaryLines(b)}
                           size="icon"
                         />
                         <Badge>{bobinStatusLabels[b.status] || b.status}</Badge>
@@ -305,6 +318,8 @@ export default function InventoryPage() {
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-700">
                       <span>Grammaj</span>
                       <span className="font-medium text-right">{b.grammaj} g/m²</span>
+                      <span>Eni</span>
+                      <span className="font-medium text-right">{formatBobinWidthMm(b.width_mm)}</span>
                       <span>Rang</span>
                       <span className="font-medium text-right">{b.color}</span>
                       <span>Og&apos;irlik</span>
@@ -328,6 +343,7 @@ export default function InventoryPage() {
                     <TableRow>
                       <TableHead>QR</TableHead>
                       <TableHead>Grammaj</TableHead>
+                      <TableHead>Eni (mm)</TableHead>
                       <TableHead>Rang</TableHead>
                       <TableHead>kg</TableHead>
                       <TableHead>m</TableHead>
@@ -344,12 +360,13 @@ export default function InventoryPage() {
                             <PrintQrButton
                               code={b.qr_code}
                               title="Bobin"
-                              lines={[`${b.grammaj} g/m²`, `${b.current_weight_kg} kg`]}
+                              lines={bobinSummaryLines(b)}
                               size="icon"
                             />
                           </span>
                         </TableCell>
                         <TableCell>{b.grammaj}</TableCell>
+                        <TableCell>{formatBobinWidthMm(b.width_mm)}</TableCell>
                         <TableCell>{b.color}</TableCell>
                         <TableCell>{Number(b.current_weight_kg).toLocaleString('uz-UZ')}</TableCell>
                         <TableCell>{Number(b.current_length_m).toLocaleString('uz-UZ')}</TableCell>
