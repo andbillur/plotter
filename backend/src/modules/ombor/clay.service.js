@@ -49,3 +49,39 @@ export async function listTransactions(query) {
   );
   return paginatedResponse(rows, count.rows[0].total, { page, limit });
 }
+
+export async function removeTransaction(id) {
+  const { rows } = await db.query(`SELECT * FROM clay_transactions WHERE id = $1`, [id]);
+  if (!rows.length) throw new AppError('Yozuv topilmadi', 404);
+  const tx = rows[0];
+  if (tx.production_session_id) {
+    throw new AppError('Ishlab chiqarishga bog\'langan kley yozuvini o\'chirib bo\'lmaydi', 400);
+  }
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    if (tx.operation === 'kirim') {
+      const inv = await client.query(`SELECT current_stock_kg FROM clay_inventory LIMIT 1 FOR UPDATE`);
+      const next = Number(inv.rows[0].current_stock_kg) - Number(tx.quantity_kg);
+      if (next < 0) throw new AppError('Qoldiq manfiy bo\'ladi — avval boshqa kirimlarni tekshiring', 400);
+      await client.query(
+        `UPDATE clay_inventory SET current_stock_kg = $1, updated_at = NOW()`,
+        [next]
+      );
+    } else {
+      await client.query(
+        `UPDATE clay_inventory SET current_stock_kg = current_stock_kg + $1, updated_at = NOW()`,
+        [tx.quantity_kg]
+      );
+    }
+    await client.query(`DELETE FROM clay_transactions WHERE id = $1`, [id]);
+    await client.query('COMMIT');
+    const bal = await getBalance();
+    return { ok: true, balance: bal };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}

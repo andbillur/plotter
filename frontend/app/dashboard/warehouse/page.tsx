@@ -8,13 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { apiClient } from '@/lib/api';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, Trash2 } from 'lucide-react';
+import { useAuthStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const COLORS = ['white', 'cream', 'blue', 'grey', 'other'];
 
 export default function WarehousePage() {
+  const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin());
   const [products, setProducts] = useState<Record<string, unknown>[]>([]);
   const [total, setTotal] = useState({ n: 0, kg: 0 });
   const [loading, setLoading] = useState(true);
@@ -33,6 +35,17 @@ export default function WarehousePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleDelete = async (p: Record<string, unknown>) => {
+    if (!confirm(`${p.qr_code} — ombordan o'chirilsinmi?`)) return;
+    try {
+      await apiClient.deleteWarehouseProduct(String(p.id));
+      toast.success('Mahsulot o\'chirildi');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    }
+  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,6 +118,7 @@ export default function WarehousePage() {
                     <TableHead>Eni (sm)</TableHead>
                     <TableHead>kg</TableHead>
                     <TableHead>Rang</TableHead>
+                    {isSuperAdmin && <TableHead className="w-12" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -114,6 +128,19 @@ export default function WarehousePage() {
                       <TableCell>{p.width_cm}</TableCell>
                       <TableCell>{Number(p.weight_kg).toLocaleString('uz-UZ')}</TableCell>
                       <TableCell>{String(p.color || 'white')}</TableCell>
+                      {isSuperAdmin && (
+                        <TableCell>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-600"
+                            onClick={() => handleDelete(p)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

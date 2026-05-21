@@ -26,7 +26,7 @@ import { apiClient } from '@/lib/api';
 import { bobinStatusLabels } from '@/lib/constants';
 import { useAuthStore } from '@/lib/store';
 import type { Bobin } from '@/lib/types';
-import { Search, Loader2, Plus, Package } from 'lucide-react';
+import { Search, Loader2, Plus, Package, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Table,
@@ -57,6 +57,7 @@ const emptyForm = {
 
 export default function InventoryPage() {
   const canCreate = useAuthStore((s) => s.hasPermission('bobin:create'));
+  const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin());
   const [bobins, setBobins] = useState<Bobin[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -97,6 +98,17 @@ export default function InventoryPage() {
       toast.success(`Bobin qo'shildi: ${created.qr_code}`);
       setOpen(false);
       setForm(emptyForm);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    }
+  };
+
+  const handleDeleteBobin = async (b: Bobin) => {
+    if (!confirm(`${b.qr_code} — butunlay o'chirilsinmi?`)) return;
+    try {
+      await apiClient.deleteBobin(b.id);
+      toast.success('Bobin o\'chirildi');
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Xatolik');
@@ -259,6 +271,18 @@ export default function InventoryPage() {
                       <p className="font-mono text-sm font-bold break-all">{b.qr_code}</p>
                       <Badge className="shrink-0">{bobinStatusLabels[b.status] || b.status}</Badge>
                     </div>
+                    {isSuperAdmin && b.status === 'omborxonada' && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="w-full min-h-[40px]"
+                        onClick={() => handleDeleteBobin(b)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        O&apos;chirish
+                      </Button>
+                    )}
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-700">
                       <span>Grammaj</span>
                       <span className="font-medium text-right">{b.grammaj} g/m²</span>
@@ -289,6 +313,7 @@ export default function InventoryPage() {
                       <TableHead>kg</TableHead>
                       <TableHead>m</TableHead>
                       <TableHead>Holat</TableHead>
+                      {isSuperAdmin && <TableHead className="w-12" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -302,6 +327,22 @@ export default function InventoryPage() {
                         <TableCell>
                           <Badge>{bobinStatusLabels[b.status] || b.status}</Badge>
                         </TableCell>
+                        {isSuperAdmin && (
+                          <TableCell>
+                            {b.status === 'omborxonada' ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="text-red-600"
+                                title="O'chirish"
+                                onClick={() => handleDeleteBobin(b)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>

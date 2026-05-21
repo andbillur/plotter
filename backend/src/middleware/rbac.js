@@ -21,3 +21,12 @@ export function checkPermission(permissionCode) {
     next();
   };
 }
+
+/** Faqat super_admin — bobin, kley kirim, tayyor mahsulot o'chirish */
+export function checkSuperAdmin(req, res, next) {
+  if (req.user?.role === 'super_admin') return next();
+  return res.status(403).json({
+    error: 'Faqat Super Admin o\'chira oladi',
+    required: 'super_admin',
+  });
+}

@@ -89,3 +89,30 @@ export async function registerFromQr(qrCode, data = {}) {
   );
   return updated[0];
 }
+
+export async function removeProduct(id) {
+  const { rows } = await db.query(`SELECT * FROM cut_products WHERE id = $1`, [id]);
+  if (!rows.length) throw new AppError('Mahsulot topilmadi', 404);
+  const p = rows[0];
+  if (p.stock_status !== 'omborxonada') {
+    throw new AppError('Faqat ombordagi mahsulotni o\'chirish mumkin', 400);
+  }
+  const ship = await db.query(
+    `SELECT 1 FROM shipment_items WHERE cut_product_id = $1 LIMIT 1`,
+    [id]
+  );
+  if (ship.rows.length) {
+    throw new AppError('Jo\'natmaga qo\'shilgan mahsulotni o\'chirib bo\'lmaydi', 400);
+  }
+  if (p.plot_id) {
+    await db.query(
+      `UPDATE plots SET
+        total_items = GREATEST(0, total_items - 1),
+        total_weight_kg = GREATEST(0, total_weight_kg - $1)
+       WHERE id = $2`,
+      [p.weight_kg, p.plot_id]
+    );
+  }
+  await db.query(`DELETE FROM cut_products WHERE id = $1`, [id]);
+  return { ok: true, qr_code: p.qr_code };
+}

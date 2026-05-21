@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { auth } from '../../middleware/auth.js';
-import { checkPermission } from '../../middleware/rbac.js';
+import { checkPermission, checkSuperAdmin } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import * as svc from './clay.service.js';
@@ -25,4 +25,8 @@ clayRouter.post('/receive', checkPermission('clay:create'), validate(z.object({
 
 clayRouter.get('/transactions', checkPermission('clay:read'), asyncHandler(async (req, res) => {
   res.json(await svc.listTransactions(req.query));
+}));
+
+clayRouter.delete('/transactions/:id', checkSuperAdmin, asyncHandler(async (req, res) => {
+  res.json(await svc.removeTransaction(req.params.id));
 }));

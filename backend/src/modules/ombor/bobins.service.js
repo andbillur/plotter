@@ -83,3 +83,21 @@ export async function stockSummary() {
   const { rows } = await db.query(`SELECT * FROM v_bobin_stock`);
   return rows;
 }
+
+export async function remove(id) {
+  const bobin = await getById(id);
+  if (bobin.status === 'mashinada') {
+    throw new AppError('Mashinadagi bobinni o\'chirib bo\'lmaydi', 400);
+  }
+  const used = await db.query(
+    `SELECT COUNT(*)::int AS n FROM production_sessions WHERE bobin_id = $1`,
+    [id]
+  );
+  if (used.rows[0].n > 0) {
+    throw new AppError('Ishlab chiqarishda ishlatilgan bobinni o\'chirib bo\'lmaydi', 400);
+  }
+  await db.query(`DELETE FROM bobin_transactions WHERE bobin_id = $1`, [id]);
+  const { rowCount } = await db.query(`DELETE FROM bobins WHERE id = $1`, [id]);
+  if (!rowCount) throw new AppError('Bobin topilmadi', 404);
+  return { ok: true, qr_code: bobin.qr_code };
+}

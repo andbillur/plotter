@@ -96,6 +96,10 @@ class ApiClient {
     return this.request<Bobin>('/bobins', { method: 'POST', body: JSON.stringify(body) });
   }
 
+  async deleteBobin(id: string) {
+    return this.request<{ ok: boolean; qr_code: string }>(`/bobins/${id}`, { method: 'DELETE' });
+  }
+
   async getBobinByQr(qrCode: string) {
     return this.request<Bobin>(`/bobins/qr/${encodeURIComponent(qrCode)}`);
   }
@@ -122,6 +126,10 @@ class ApiClient {
   async getClayTransactions(params?: Record<string, string>) {
     const q = params ? `?${new URLSearchParams(params)}` : '';
     return this.request<PaginatedResponse<Record<string, unknown>>>(`/clay/transactions${q}`);
+  }
+
+  async deleteClayTransaction(id: string) {
+    return this.request<{ ok: boolean }>(`/clay/transactions/${id}`, { method: 'DELETE' });
   }
 
   // Machines
@@ -247,6 +255,12 @@ class ApiClient {
     qrCode?: string;
   }) {
     return this.request('/warehouse/products', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async deleteWarehouseProduct(id: string) {
+    return this.request<{ ok: boolean; qr_code: string }>(`/warehouse/products/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // Shipments

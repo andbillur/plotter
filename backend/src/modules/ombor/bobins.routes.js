@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { auth } from '../../middleware/auth.js';
-import { checkPermission } from '../../middleware/rbac.js';
+import { checkPermission, checkSuperAdmin } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import * as svc from './bobins.service.js';
@@ -49,4 +49,8 @@ bobinsRouter.patch('/:id', checkPermission('bobin:update'), validate(z.object({
   }),
 })), asyncHandler(async (req, res) => {
   res.json(await svc.update(req.params.id, req.validated.body));
+}));
+
+bobinsRouter.delete('/:id', checkSuperAdmin, asyncHandler(async (req, res) => {
+  res.json(await svc.remove(req.params.id));
 }));

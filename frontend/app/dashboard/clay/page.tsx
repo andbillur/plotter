@@ -8,11 +8,13 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { apiClient } from '@/lib/api';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, Trash2 } from 'lucide-react';
+import { useAuthStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export default function ClayPage() {
+  const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin());
   const [balance, setBalance] = useState<{ current_stock_kg: number; bag_weight_kg: number } | null>(null);
   const [transactions, setTransactions] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +33,17 @@ export default function ClayPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleDeleteTxn = async (t: Record<string, unknown>) => {
+    if (!confirm(`${t.operation} ${t.quantity_kg} kg — o'chirilsinmi? Qoldiq qayta hisoblanadi.`)) return;
+    try {
+      await apiClient.deleteClayTransaction(String(t.id));
+      toast.success('Yozuv o\'chirildi');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    }
+  };
 
   const handleReceive = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +100,7 @@ export default function ClayPage() {
                   <TableHead>Amal</TableHead>
                   <TableHead>kg</TableHead>
                   <TableHead>Sana</TableHead>
+                  {isSuperAdmin && <TableHead className="w-12" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -95,6 +109,21 @@ export default function ClayPage() {
                     <TableCell>{String(t.operation)}</TableCell>
                     <TableCell>{Number(t.quantity_kg).toLocaleString('uz-UZ')}</TableCell>
                     <TableCell>{t.created_at ? new Date(String(t.created_at)).toLocaleString('uz-UZ') : '—'}</TableCell>
+                    {isSuperAdmin && (
+                      <TableCell>
+                        {!t.production_session_id ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-600"
+                            onClick={() => handleDeleteTxn(t)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

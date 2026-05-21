@@ -11,6 +11,7 @@ interface AuthState {
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
   hasPermission: (code: string) => boolean;
+  isSuperAdmin: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -36,6 +37,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const perms = user?.permissions || [];
     return perms.includes(code);
   },
+  isSuperAdmin: () => get().user?.role === 'super_admin',
 }));
 
 interface UIState {
