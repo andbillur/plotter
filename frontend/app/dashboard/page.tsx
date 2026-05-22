@@ -8,6 +8,7 @@ import { roleDisplayNames } from '@/lib/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Package, Factory, Droplets, Layers, Loader2, BarChart3 } from 'lucide-react';
+import { ReportExportButtons } from '@/components/analytics/ReportExportButtons';
 import { BiCharts, type BiData } from '@/components/analytics/BiCharts';
 
 export default function DashboardPage() {
@@ -123,11 +124,14 @@ export default function DashboardPage() {
               <BarChart3 className="h-5 w-5 text-blue-600" />
               Analitika (30 kun)
             </h2>
-            <Link href="/dashboard/analytics">
-              <Button variant="outline" size="sm">
-                To&apos;liq analitika
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-2 items-center">
+              <Link href="/dashboard/analytics">
+                <Button variant="outline" size="sm">
+                  To&apos;liq analitika
+                </Button>
+              </Link>
+              <ReportExportButtons days={30} />
+            </div>
           </div>
           <BiCharts data={bi} compact />
         </div>

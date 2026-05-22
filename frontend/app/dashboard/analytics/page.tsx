@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { BiCharts, type BiData } from '@/components/analytics/BiCharts';
 import { PrivateAnalyticsGuide } from '@/components/analytics/PrivateAnalyticsGuide';
+import { ReportExportButtons } from '@/components/analytics/ReportExportButtons';
 import {
   BarChart3,
   Database,
@@ -91,6 +92,7 @@ export default function AnalyticsPage() {
             <Button variant="outline" size="sm" onClick={loadBi}>
               Yangilash
             </Button>
+            <ReportExportButtons days={parseInt(days, 10) || 90} />
           </div>
         </div>
 

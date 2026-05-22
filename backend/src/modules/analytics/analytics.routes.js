@@ -17,6 +17,26 @@ analyticsRouter.get('/bi', checkPermission('analytics:dashboard'), asyncHandler(
   res.json(await svc.biDashboard(req.query));
 }));
 
+analyticsRouter.get('/export/excel', checkPermission('analytics:dashboard'), asyncHandler(async (req, res) => {
+  const days = Math.min(365, Math.max(7, parseInt(req.query.days, 10) || 90));
+  const { buildExcelReport } = await import('./reports.export.js');
+  const buf = await buildExcelReport(days);
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="plotter-hisobot-${days}kun-${stamp}.xlsx"`);
+  res.send(buf);
+}));
+
+analyticsRouter.get('/export/pdf', checkPermission('analytics:dashboard'), asyncHandler(async (req, res) => {
+  const days = Math.min(365, Math.max(7, parseInt(req.query.days, 10) || 90));
+  const { buildPdfReport } = await import('./reports.export.js');
+  const buf = await buildPdfReport(days);
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="plotter-hisobot-${days}kun-${stamp}.pdf"`);
+  res.send(buf);
+}));
+
 analyticsRouter.get('/powerbi/config', checkPermission('analytics:dashboard'), asyncHandler(async (_req, res) => {
   res.json(await svc.getPowerBiConfig());
 }));
