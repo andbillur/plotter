@@ -58,17 +58,36 @@ export async function create(data, userId) {
 }
 
 export async function update(id, data) {
+  const bobin = await getById(id);
+  if (bobin.status === 'mashinada') {
+    throw new AppError('Mashinadagi bobinni tahrirlab bo\'lmaydi — avval sessiyani yakunlang', 400);
+  }
+
   const fields = [];
   const vals = [];
   let i = 1;
   const map = {
-    color: 'color', currentWeightKg: 'current_weight_kg', currentLengthM: 'current_length_m',
-    status: 'status', supplierName: 'supplier_name', batchNumber: 'batch_number',
+    grammaj: 'grammaj',
+    color: 'color',
+    widthMm: 'width_mm',
+    currentWeightKg: 'current_weight_kg',
+    currentLengthM: 'current_length_m',
+    status: 'status',
+    supplierName: 'supplier_name',
+    batchNumber: 'batch_number',
   };
   for (const [k, col] of Object.entries(map)) {
-    if (data[k] !== undefined) { fields.push(`${col} = $${i++}`); vals.push(data[k]); }
+    if (data[k] !== undefined) {
+      fields.push(`${col} = $${i++}`);
+      vals.push(data[k]);
+    }
   }
   if (!fields.length) throw new AppError('Yangilash uchun ma\'lumot yo\'q', 400);
+
+  if (data.status === 'omborxonada' && Number(data.currentWeightKg ?? bobin.current_weight_kg) <= 0.01) {
+    throw new AppError('Omborga qaytarish uchun og\'irlik 0 dan katta bo\'lishi kerak', 400);
+  }
+
   fields.push('updated_at = NOW()');
   vals.push(id);
   const { rows } = await db.query(

@@ -125,8 +125,17 @@ export async function upsertCostConfig(data, userId) {
 
 export async function currentCostConfig() {
   const { rows } = await db.query(`SELECT * FROM cost_config ORDER BY valid_from DESC LIMIT 1`);
-  if (!rows.length) throw new AppError('Narx konfiguratsiyasi yo\'q', 404);
-  return rows[0];
+  return rows[0] || null;
+}
+
+export async function listCostConfigHistory(limit = 8) {
+  const { rows } = await db.query(
+    `SELECT id, paper_price_per_kg, clay_price_per_kg, electricity_cost_per_kg,
+            labor_cost_per_kg, other_cost_per_kg, currency, valid_from, created_at
+     FROM cost_config ORDER BY valid_from DESC LIMIT $1`,
+    [limit]
+  );
+  return rows;
 }
 
 export async function auditLogs(query) {

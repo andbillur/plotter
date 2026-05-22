@@ -40,12 +40,16 @@ bobinsRouter.get('/:id', checkPermission('bobin:read'), asyncHandler(async (req,
   res.json(await svc.getById(req.params.id));
 }));
 
-bobinsRouter.patch('/:id', checkPermission('bobin:update'), validate(z.object({
+bobinsRouter.patch('/:id', checkSuperAdmin, validate(z.object({
   body: z.object({
+    grammaj: z.number().positive().optional(),
     color: z.string().optional(),
-    currentWeightKg: z.number().optional(),
-    currentLengthM: z.number().optional(),
-    status: z.enum(['omborxonada', 'mashinada', 'ishlatilgan', 'qaytarilgan']).optional(),
+    widthMm: z.number().nonnegative().nullable().optional(),
+    currentWeightKg: z.number().nonnegative().optional(),
+    currentLengthM: z.number().nonnegative().optional(),
+    supplierName: z.string().nullable().optional(),
+    batchNumber: z.string().nullable().optional(),
+    status: z.enum(['omborxonada', 'ishlatilgan', 'qaytarilgan']).optional(),
   }),
 })), asyncHandler(async (req, res) => {
   res.json(await svc.update(req.params.id, req.validated.body));

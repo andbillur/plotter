@@ -33,8 +33,12 @@ analyticsRouter.get('/inventory', checkPermission('analytics:dashboard'), asyncH
   res.json(await svc.inventory());
 }));
 
-analyticsRouter.get('/cost-config/current', checkPermission('analytics:cost'), asyncHandler(async (_req, res) => {
+analyticsRouter.get('/cost-config/current', checkPermission('cost_config:manage'), asyncHandler(async (_req, res) => {
   res.json(await svc.currentCostConfig());
+}));
+
+analyticsRouter.get('/cost-config/history', checkPermission('cost_config:manage'), asyncHandler(async (req, res) => {
+  res.json(await svc.listCostConfigHistory(parseInt(req.query.limit, 10) || 8));
 }));
 
 analyticsRouter.post('/cost-config', checkPermission('cost_config:manage'), validate(z.object({

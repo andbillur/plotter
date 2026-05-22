@@ -27,7 +27,7 @@ import { bobinStatusLabels, bobinSummaryLines, bobinSummaryText, formatBobinWidt
 import { useAuthStore } from '@/lib/store';
 import type { Bobin } from '@/lib/types';
 import { PrintQrButton } from '@/components/PrintQrButton';
-import { Search, Loader2, Plus, Package, Trash2 } from 'lucide-react';
+import { Search, Loader2, Plus, Package, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Table,
@@ -56,6 +56,36 @@ const emptyForm = {
   supplierName: '',
 };
 
+const STATUS_EDIT = [
+  { value: 'omborxonada', label: 'Omborda' },
+  { value: 'ishlatilgan', label: 'Ishlatilgan (qoldiq yo\'q)' },
+  { value: 'qaytarilgan', label: 'Qaytarilgan' },
+] as const;
+
+type EditForm = {
+  grammaj: string;
+  color: string;
+  widthMm: string;
+  currentWeightKg: string;
+  currentLengthM: string;
+  supplierName: string;
+  batchNumber: string;
+  status: (typeof STATUS_EDIT)[number]['value'];
+};
+
+function bobinToEditForm(b: Bobin): EditForm {
+  return {
+    grammaj: String(b.grammaj),
+    color: b.color || 'white',
+    widthMm: b.width_mm != null ? String(b.width_mm) : '',
+    currentWeightKg: String(b.current_weight_kg),
+    currentLengthM: String(b.current_length_m),
+    supplierName: b.supplier_name || '',
+    batchNumber: b.batch_number || '',
+    status: (b.status === 'mashinada' ? 'omborxonada' : b.status) as EditForm['status'],
+  };
+}
+
 export default function InventoryPage() {
   const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin());
   const [bobins, setBobins] = useState<Bobin[]>([]);
@@ -69,6 +99,9 @@ export default function InventoryPage() {
     width_mm?: number | null;
   } | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [editBobin, setEditBobin] = useState<Bobin | null>(null);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -114,6 +147,43 @@ export default function InventoryPage() {
       toast.error(err instanceof Error ? err.message : 'Xatolik');
     }
   };
+
+  const openEdit = (b: Bobin) => {
+    if (b.status === 'mashinada') {
+      toast.error('Mashinadagi bobinni tahrirlab bo\'lmaydi');
+      return;
+    }
+    setEditBobin(b);
+    setEditForm(bobinToEditForm(b));
+  };
+
+  const handleUpdateBobin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editBobin || !editForm) return;
+    setSavingEdit(true);
+    try {
+      await apiClient.updateBobin(editBobin.id, {
+        grammaj: parseFloat(editForm.grammaj),
+        color: editForm.color,
+        widthMm: editForm.widthMm ? parseFloat(editForm.widthMm) : null,
+        currentWeightKg: parseFloat(editForm.currentWeightKg),
+        currentLengthM: parseFloat(editForm.currentLengthM),
+        supplierName: editForm.supplierName.trim() || null,
+        batchNumber: editForm.batchNumber.trim() || null,
+        status: editForm.status,
+      });
+      toast.success('Bobin yangilandi');
+      setEditBobin(null);
+      setEditForm(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const canEditBobin = (b: Bobin) => isSuperAdmin && b.status !== 'mashinada';
 
   const handleDeleteBobin = async (b: Bobin) => {
     if (!confirm(`${b.qr_code} — butunlay o'chirilsinmi?`)) return;
@@ -303,17 +373,33 @@ export default function InventoryPage() {
                         <Badge>{bobinStatusLabels[b.status] || b.status}</Badge>
                       </div>
                     </div>
-                    {isSuperAdmin && b.status === 'omborxonada' && (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="w-full min-h-[40px]"
-                        onClick={() => handleDeleteBobin(b)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        O&apos;chirish
-                      </Button>
+                    {isSuperAdmin && (
+                      <div className="flex gap-2">
+                        {canEditBobin(b) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 min-h-[40px]"
+                            onClick={() => openEdit(b)}
+                          >
+                            <Pencil className="h-4 w-4 mr-1" />
+                            Tahrir
+                          </Button>
+                        )}
+                        {b.status === 'omborxonada' && (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="flex-1 min-h-[40px]"
+                            onClick={() => handleDeleteBobin(b)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            O&apos;chirish
+                          </Button>
+                        )}
+                      </div>
                     )}
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-700">
                       <span>Grammaj</span>
@@ -348,7 +434,7 @@ export default function InventoryPage() {
                       <TableHead>kg</TableHead>
                       <TableHead>m</TableHead>
                       <TableHead>Holat</TableHead>
-                      {isSuperAdmin && <TableHead className="w-12" />}
+                      {isSuperAdmin && <TableHead className="text-right">Amallar</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -374,19 +460,32 @@ export default function InventoryPage() {
                           <Badge>{bobinStatusLabels[b.status] || b.status}</Badge>
                         </TableCell>
                         {isSuperAdmin && (
-                          <TableCell>
-                            {b.status === 'omborxonada' ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="text-red-600"
-                                title="O'chirish"
-                                onClick={() => handleDeleteBobin(b)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            ) : null}
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              {canEditBobin(b) && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Tahrir"
+                                  onClick={() => openEdit(b)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {b.status === 'omborxonada' && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-red-600"
+                                  title="O'chirish"
+                                  onClick={() => handleDeleteBobin(b)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         )}
                       </TableRow>
@@ -397,6 +496,121 @@ export default function InventoryPage() {
             </Card>
           </>
         )}
+        <Dialog open={!!editBobin} onOpenChange={(o) => !o && (setEditBobin(null), setEditForm(null))}>
+          <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Bobin tahrirlash</DialogTitle>
+            </DialogHeader>
+            {editBobin && editForm && (
+              <form onSubmit={handleUpdateBobin} className="space-y-4">
+                <p className="font-mono text-sm bg-slate-100 rounded px-2 py-1 break-all">{editBobin.qr_code}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Grammaj (g/m²)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      required
+                      className="min-h-[44px]"
+                      value={editForm.grammaj}
+                      onChange={(e) => setEditForm({ ...editForm, grammaj: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Eni (mm)</Label>
+                    <Input
+                      type="number"
+                      className="min-h-[44px]"
+                      value={editForm.widthMm}
+                      onChange={(e) => setEditForm({ ...editForm, widthMm: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Rang</Label>
+                  <Select value={editForm.color} onValueChange={(color) => setEditForm({ ...editForm, color })}>
+                    <SelectTrigger className="min-h-[44px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COLORS.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Joriy og&apos;irlik (kg)</Label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      required
+                      className="min-h-[44px]"
+                      value={editForm.currentWeightKg}
+                      onChange={(e) => setEditForm({ ...editForm, currentWeightKg: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>Joriy uzunlik (m)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      required
+                      className="min-h-[44px]"
+                      value={editForm.currentLengthM}
+                      onChange={(e) => setEditForm({ ...editForm, currentLengthM: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Holat</Label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(status) =>
+                      setEditForm({ ...editForm, status: status as EditForm['status'] })
+                    }
+                  >
+                    <SelectTrigger className="min-h-[44px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_EDIT.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Qoldiq bo&apos;lsa «Omborda» qiling — qayta ishlab chiqarish mumkin
+                  </p>
+                </div>
+                <div>
+                  <Label>Yetkazib beruvchi</Label>
+                  <Input
+                    className="min-h-[44px]"
+                    value={editForm.supplierName}
+                    onChange={(e) => setEditForm({ ...editForm, supplierName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Partiya raqami</Label>
+                  <Input
+                    className="min-h-[44px]"
+                    value={editForm.batchNumber}
+                    onChange={(e) => setEditForm({ ...editForm, batchNumber: e.target.value })}
+                  />
+                </div>
+                <Button type="submit" className="w-full min-h-[48px]" disabled={savingEdit}>
+                  {savingEdit ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Saqlash'}
+                </Button>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </RoleGuard>
   );

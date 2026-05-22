@@ -100,6 +100,25 @@ class ApiClient {
     return this.request<{ ok: boolean; qr_code: string }>(`/bobins/${id}`, { method: 'DELETE' });
   }
 
+  async updateBobin(
+    id: string,
+    body: {
+      grammaj?: number;
+      color?: string;
+      widthMm?: number | null;
+      currentWeightKg?: number;
+      currentLengthM?: number;
+      supplierName?: string | null;
+      batchNumber?: string | null;
+      status?: 'omborxonada' | 'ishlatilgan' | 'qaytarilgan';
+    }
+  ) {
+    return this.request<Bobin>(`/bobins/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+
   async getBobinByQr(qrCode: string) {
     return this.request<Bobin>(`/bobins/qr/${encodeURIComponent(qrCode)}`);
   }
@@ -324,6 +343,27 @@ class ApiClient {
 
   async getInventoryAnalytics() {
     return this.request<Record<string, unknown>>('/analytics/inventory');
+  }
+
+  async getCostConfig() {
+    return this.request<Record<string, unknown> | null>('/analytics/cost-config/current');
+  }
+
+  async getCostConfigHistory(limit = 8) {
+    return this.request<Record<string, unknown>[]>(`/analytics/cost-config/history?limit=${limit}`);
+  }
+
+  async saveCostConfig(body: {
+    paperPricePerKg: number;
+    clayPricePerKg: number;
+    electricityCostPerKg?: number;
+    laborCostPerKg?: number;
+    otherCostPerKg?: number;
+  }) {
+    return this.request<Record<string, unknown>>('/analytics/cost-config', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
   }
 
   // Users
