@@ -10,7 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { apiClient } from '@/lib/api';
-import { sessionStatusLabels, bobinSummaryText, formatBobinWidthMm } from '@/lib/constants';
+import {
+  sessionStatusLabels,
+  bobinSummaryText,
+  formatBobinWidthMm,
+  bobinCanStartProduction,
+} from '@/lib/constants';
 import { PrintQrButton } from '@/components/PrintQrButton';
 import { Play, Square, Droplets, Loader2, Scissors, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -68,8 +73,12 @@ export default function ManufacturingPage() {
     setBobinQr(code);
     try {
       const b = await apiClient.getBobinByQr(code);
-      if (b.status !== 'omborxonada') {
-        toast.error(`Bobin holati: ${b.status} — faqat ombordagilar ishlatiladi`);
+      if (!bobinCanStartProduction(b)) {
+        toast.error(
+          b.status === 'ishlatilgan'
+            ? 'Bobin to\'liq ishlatilgan (qoldiq yo\'q)'
+            : `Bobin holati: ${b.status} — ishlab chiqarish mumkin emas`
+        );
         return;
       }
       setSelectedBobin(b);
@@ -112,12 +121,20 @@ export default function ManufacturingPage() {
   };
 
   const handleFinish = async (sessionId: string) => {
+    const remaining = parseFloat(finishForm.bobinRemainingWeightKg);
     try {
       await apiClient.finishProduction(sessionId, {
         outputWeightKg: parseFloat(finishForm.outputWeightKg),
-        bobinRemainingWeightKg: parseFloat(finishForm.bobinRemainingWeightKg),
+        bobinRemainingWeightKg: remaining,
       });
-      toast.success('FINISH — endi SPLIT qiling (ona qog\'oz QR)');
+      if (remaining > 0.01) {
+        toast.success(
+          `FINISH — bobinda ${remaining} kg qoldi, yana omborda (keyingi ishlab chiqarish mumkin). SPLIT qiling.`,
+          { duration: 8000 }
+        );
+      } else {
+        toast.success('FINISH — bobin to\'liq ishlatildi. SPLIT qiling (ona qog\'oz QR)');
+      }
       setFinishForm({ outputWeightKg: '', bobinRemainingWeightKg: '' });
       load();
     } catch (err) {
@@ -233,7 +250,16 @@ export default function ManufacturingPage() {
                           </div>
                           <div>
                             <Label>Qolgan bobin (kg)</Label>
-                            <Input value={finishForm.bobinRemainingWeightKg} onChange={(e) => setFinishForm({ ...finishForm, bobinRemainingWeightKg: e.target.value })} />
+                            <p className="text-xs text-slate-500 mb-1">
+                              0 dan katta bo&apos;lsa bobin yana <strong>omborda</strong> — keyin qayta ishlatish mumkin
+                            </p>
+                            <Input
+                              type="number"
+                              step="0.001"
+                              inputMode="decimal"
+                              value={finishForm.bobinRemainingWeightKg}
+                              onChange={(e) => setFinishForm({ ...finishForm, bobinRemainingWeightKg: e.target.value })}
+                            />
                           </div>
                           <Button className="w-full" onClick={() => handleFinish(String(s.id))}>Yakunlash</Button>
                         </div>

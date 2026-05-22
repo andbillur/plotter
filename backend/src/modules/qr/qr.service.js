@@ -18,7 +18,12 @@ export async function scan(qrCode, roleName) {
   if (bobin.rows.length) {
     type = 'bobin';
     data = bobin.rows[0];
-    if (data.status === 'omborxonada') allowedActions.push('start_production');
+    if (
+      data.status === 'omborxonada' ||
+      (data.status === 'ishlatilgan' && Number(data.current_weight_kg) > 0.01)
+    ) {
+      allowedActions.push('start_production');
+    }
     return buildResponse(type, data, roleName, allowedActions);
   }
 

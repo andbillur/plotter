@@ -68,6 +68,20 @@ export function bobinSummaryText(b: Parameters<typeof bobinSummaryLines>[0]): st
   return bobinSummaryLines(b).join(' · ');
 }
 
+/** FINISH dan keyin qoldiq bo'lsa yana ishlab chiqarish mumkin */
+export const MIN_BOBIN_REMAINING_KG = 0.01;
+
+export function bobinCanStartProduction(b: {
+  status: string;
+  current_weight_kg?: number | string;
+}): boolean {
+  if (b.status === 'omborxonada') return true;
+  if (b.status === 'ishlatilgan' && Number(b.current_weight_kg) > MIN_BOBIN_REMAINING_KG) {
+    return true;
+  }
+  return false;
+}
+
 export const bobinStatusLabels: Record<string, string> = {
   omborxonada: 'Omborda',
   mashinada: 'Mashinada',

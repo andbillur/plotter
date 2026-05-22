@@ -2,6 +2,22 @@ import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
 
+/** Qoldiq bor-yo'qligini tekshirish (kg) */
+const MIN_BOBIN_REMAINING_KG = 0.01;
+
+function bobinCanStartProduction(bobin) {
+  if (bobin.status === 'omborxonada') return true;
+  // Eski yozuvlar: ishlatilgan, lekin qoldiq bor
+  if (bobin.status === 'ishlatilgan' && Number(bobin.current_weight_kg) > MIN_BOBIN_REMAINING_KG) {
+    return true;
+  }
+  return false;
+}
+
+function bobinStatusAfterFinish(remainingKg) {
+  return Number(remainingKg) > MIN_BOBIN_REMAINING_KG ? 'omborxonada' : 'ishlatilgan';
+}
+
 export async function start({ bobinQrCode, machineId }, operatorId) {
   const client = await db.getClient();
   try {
@@ -12,7 +28,15 @@ export async function start({ bobinQrCode, machineId }, operatorId) {
     );
     if (!bobin.rows.length) throw new AppError('Bobin topilmadi', 404);
     const b = bobin.rows[0];
-    if (b.status !== 'omborxonada') throw new AppError('Bobin omborda emas', 400);
+    if (!bobinCanStartProduction(b)) {
+      if (b.status === 'mashinada') {
+        throw new AppError('Bobin boshqa mashinada', 400);
+      }
+      if (b.status === 'ishlatilgan') {
+        throw new AppError('Bobin to\'liq ishlatilgan (qoldiq yo\'q)', 400);
+      }
+      throw new AppError('Bobin ishlab chiqarish uchun tayyor emas', 400);
+    }
 
     const active = await client.query(
       `SELECT id FROM production_sessions WHERE bobin_id = $1 AND status = 'boshlangan'`,
@@ -112,14 +136,15 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
       [bobinRemainingWeightKg, outputWeightKg, sessionId]
     );
 
+    const nextStatus = bobinStatusAfterFinish(bobinRemainingWeightKg);
     await client.query(
       `UPDATE bobins SET
         current_weight_kg = $1,
-        status = 'ishlatilgan',
+        status = $2,
         current_machine_id = NULL,
         updated_at = NOW()
-       WHERE id = $2`,
-      [bobinRemainingWeightKg, s.bobin_id]
+       WHERE id = $3`,
+      [bobinRemainingWeightKg, nextStatus, s.bobin_id]
     );
 
     const cost = await client.query(`SELECT * FROM calculate_production_cost($1)`, [sessionId]);
