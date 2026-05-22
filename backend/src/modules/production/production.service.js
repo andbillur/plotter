@@ -212,13 +212,28 @@ export async function cancel(sessionId) {
 }
 
 export async function getById(id) {
-  const { rows } = await db.query(`SELECT * FROM production_sessions WHERE id = $1`, [id]);
+  const { rows } = await db.query(
+    `SELECT ${SESSION_LIST_SELECT}
+     FROM production_sessions ps
+     JOIN bobins b ON b.id = ps.bobin_id
+     LEFT JOIN machines m ON m.id = ps.machine_id
+     WHERE ps.id = $1`,
+    [id]
+  );
   if (!rows.length) throw new AppError('Sessiya topilmadi', 404);
   const clay = await db.query(
     `SELECT * FROM session_clay_additions WHERE session_id = $1 ORDER BY added_at`,
     [id]
   );
-  return { ...rows[0], clayAdditions: clay.rows };
+  let costReport = null;
+  if (rows[0].status === 'tugallangan') {
+    const cost = await db.query(
+      `SELECT * FROM production_cost_reports WHERE session_id = $1 ORDER BY calculated_at DESC LIMIT 1`,
+      [id]
+    );
+    costReport = cost.rows[0] || null;
+  }
+  return { ...rows[0], clayAdditions: clay.rows, costReport };
 }
 
 export async function getCost(id) {
@@ -233,13 +248,34 @@ export async function getCost(id) {
   return rows[0];
 }
 
+const SESSION_LIST_SELECT = `
+  ps.*,
+  b.qr_code AS bobin_qr,
+  b.grammaj AS bobin_grammaj,
+  b.width_mm AS bobin_width_mm,
+  m.name AS machine_name,
+  CASE
+    WHEN ps.output_weight_kg > 0 AND ps.total_clay_used_kg > 0
+    THEN ROUND(ps.total_clay_used_kg / ps.output_weight_kg, 4)
+    ELSE NULL
+  END AS clay_per_kg_output,
+  CASE
+    WHEN ps.bobin_used_kg > 0 AND ps.total_clay_used_kg > 0
+    THEN ROUND(ps.total_clay_used_kg / ps.bobin_used_kg, 4)
+    ELSE NULL
+  END AS clay_per_kg_paper
+`;
+
 export async function listActive() {
   const { rows } = await db.query(
-    `SELECT ps.*, b.qr_code AS bobin_qr, m.name AS machine_name
+    `SELECT ${SESSION_LIST_SELECT},
+            b.current_weight_kg AS bobin_current_kg,
+            GREATEST(0, ps.bobin_weight_at_start_kg - b.current_weight_kg) AS bobin_consumed_so_far_kg
      FROM production_sessions ps
      JOIN bobins b ON b.id = ps.bobin_id
      JOIN machines m ON m.id = ps.machine_id
-     WHERE ps.status = 'boshlangan'`
+     WHERE ps.status = 'boshlangan'
+     ORDER BY ps.started_at DESC`
   );
   return rows;
 }
@@ -249,16 +285,20 @@ export async function list(query) {
   const conditions = ['1=1'];
   const params = [];
   let i = 1;
-  if (query.status) { conditions.push(`status = $${i++}`); params.push(query.status); }
-  if (query.machineId) { conditions.push(`machine_id = $${i++}`); params.push(query.machineId); }
+  if (query.status) { conditions.push(`ps.status = $${i++}`); params.push(query.status); }
+  if (query.machineId) { conditions.push(`ps.machine_id = $${i++}`); params.push(query.machineId); }
   const count = await db.query(
-    `SELECT COUNT(*)::int AS total FROM production_sessions WHERE ${conditions.join(' AND ')}`,
+    `SELECT COUNT(*)::int AS total FROM production_sessions ps WHERE ${conditions.join(' AND ')}`,
     params
   );
   const q = [...params, limit, offset];
   const { rows } = await db.query(
-    `SELECT * FROM production_sessions WHERE ${conditions.join(' AND ')}
-     ORDER BY started_at ${order} LIMIT $${i++} OFFSET $${i}`,
+    `SELECT ${SESSION_LIST_SELECT}
+     FROM production_sessions ps
+     JOIN bobins b ON b.id = ps.bobin_id
+     LEFT JOIN machines m ON m.id = ps.machine_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY ps.started_at ${order} LIMIT $${i++} OFFSET $${i}`,
     q
   );
   return paginatedResponse(rows, count.rows[0].total, { page, limit });

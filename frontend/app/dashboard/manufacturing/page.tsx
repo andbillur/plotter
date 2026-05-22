@@ -17,11 +17,48 @@ import {
   bobinCanStartProduction,
 } from '@/lib/constants';
 import { PrintQrButton } from '@/components/PrintQrButton';
-import { Play, Square, Droplets, Loader2, Scissors, Plus } from 'lucide-react';
+import { Play, Square, Droplets, Loader2, Scissors, Plus, BarChart3 } from 'lucide-react';
+import { fmtKg, fmtRatio, sessionClaySummary } from '@/lib/production-stats';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { Bobin } from '@/lib/types';
+
+function ProductionStatsGrid({ s }: { s: Record<string, unknown> }) {
+  const st = sessionClaySummary(s);
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs sm:text-sm bg-slate-50 rounded-lg p-3 border">
+      <div>
+        <p className="text-slate-500">Bobin boshlang&apos;ich</p>
+        <p className="font-semibold">{fmtKg(st.start)}</p>
+      </div>
+      <div>
+        <p className="text-slate-500">Ishlatilgan qog&apos;oz</p>
+        <p className="font-semibold">{fmtKg(st.paperUsed || s.bobin_consumed_so_far_kg)}</p>
+      </div>
+      <div>
+        <p className="text-slate-500">Kley jami</p>
+        <p className="font-semibold text-blue-700">{fmtKg(st.clay)}</p>
+      </div>
+      <div>
+        <p className="text-slate-500">Tayyor chiqish</p>
+        <p className="font-semibold">{fmtKg(st.output)}</p>
+      </div>
+      {st.output > 0 && st.clay > 0 && (
+        <>
+          <div>
+            <p className="text-slate-500">Kley / 1 kg chiqish</p>
+            <p className="font-semibold">{fmtRatio(st.clayPerOutput)} kg</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Kley / 1 kg qog&apos;oz</p>
+            <p className="font-semibold">{fmtRatio(st.clayPerPaper)} kg</p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function ManufacturingPage() {
   const [sessions, setSessions] = useState<Record<string, unknown>[]>([]);
@@ -36,6 +73,9 @@ export default function ManufacturingPage() {
   const [splitSessionId, setSplitSessionId] = useState('');
   const [splitWeights, setSplitWeights] = useState('200,200,200');
   const [lastSplitPapers, setLastSplitPapers] = useState<Record<string, unknown>[]>([]);
+  const [clayKg, setClayKg] = useState('20');
+  const [detailSession, setDetailSession] = useState<Record<string, unknown> | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(() => {
     Promise.all([
@@ -110,30 +150,60 @@ export default function ManufacturingPage() {
     }
   };
 
-  const handleClay = async (sessionId: string, kg: number) => {
+  const handleClay = async (sessionId: string, kg?: number) => {
+    const qty = kg ?? parseFloat(clayKg);
+    if (!qty || qty <= 0) {
+      toast.error('Kley og\'irligini kiriting');
+      return;
+    }
     try {
-      await apiClient.addClayToSession(sessionId, { quantityKg: kg });
-      toast.success(`${kg} kg kley qo'shildi`);
+      const res = await apiClient.addClayToSession(sessionId, { quantityKg: qty });
+      const total = (res as { totalClayUsedKg?: number }).totalClayUsedKg;
+      toast.success(
+        total != null
+          ? `+${qty} kg kley — jami: ${Number(total).toLocaleString('uz-UZ')} kg`
+          : `${qty} kg kley qo'shildi`
+      );
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Xatolik');
     }
   };
 
+  const openSessionDetail = async (sessionId: string) => {
+    setDetailLoading(true);
+    try {
+      const d = await apiClient.getProductionSession(sessionId);
+      setDetailSession(d);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const handleFinish = async (sessionId: string) => {
     const remaining = parseFloat(finishForm.bobinRemainingWeightKg);
     try {
-      await apiClient.finishProduction(sessionId, {
+      const res = await apiClient.finishProduction(sessionId, {
         outputWeightKg: parseFloat(finishForm.outputWeightKg),
         bobinRemainingWeightKg: remaining,
       });
+      const cost = res.costReport;
+      let clayMsg = '';
+      if (cost) {
+        const clay = Number(cost.clay_used_kg);
+        const paper = Number(cost.paper_used_kg);
+        const perPaper = paper > 0 ? clay / paper : null;
+        clayMsg = ` Kley jami ${fmtKg(clay)}; ${fmtRatio(perPaper)} kg/ishl. qog'oz; ${fmtRatio(cost.clay_per_kg_paper)} kg/tayyor chiqish.`;
+      }
       if (remaining > 0.01) {
         toast.success(
-          `FINISH — bobinda ${remaining} kg qoldi, yana omborda (keyingi ishlab chiqarish mumkin). SPLIT qiling.`,
-          { duration: 8000 }
+          `FINISH — bobinda ${remaining} kg qoldi.${clayMsg} SPLIT qiling.`,
+          { duration: 10000 }
         );
       } else {
-        toast.success('FINISH — bobin to\'liq ishlatildi. SPLIT qiling (ona qog\'oz QR)');
+        toast.success(`FINISH tugadi.${clayMsg} SPLIT qiling.`, { duration: 10000 });
       }
       setFinishForm({ outputWeightKg: '', bobinRemainingWeightKg: '' });
       load();
@@ -233,9 +303,29 @@ export default function ManufacturingPage() {
                     <span className="font-mono font-bold">{String(s.session_code)}</span>
                     <span className="text-sm font-mono">{String(s.bobin_qr)}</span>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => handleClay(String(s.id), 20)}>
-                      <Droplets className="h-4 w-4 mr-1" />+20 kg kley
+                  <p className="text-xs text-slate-600">
+                    Bobin: {fmtKg(s.bobin_weight_at_start_kg)} boshlang&apos;ich
+                    {Number(s.bobin_consumed_so_far_kg) > 0 &&
+                      ` · ${fmtKg(s.bobin_consumed_so_far_kg)} ishlatildi`}
+                  </p>
+                  <ProductionStatsGrid s={s} />
+                  <div className="flex flex-wrap gap-2 items-end">
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        className="w-24 min-h-[40px]"
+                        value={clayKg}
+                        onChange={(e) => setClayKg(e.target.value)}
+                      />
+                      <Button size="sm" variant="outline" onClick={() => handleClay(String(s.id))}>
+                        <Droplets className="h-4 w-4 mr-1" />
+                        Kley qo&apos;shish
+                      </Button>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => openSessionDetail(String(s.id))}>
+                      <BarChart3 className="h-4 w-4 mr-1" />
+                      Tarix
                     </Button>
                     <Dialog>
                       <DialogTrigger asChild>
@@ -298,7 +388,7 @@ export default function ManufacturingPage() {
               <SelectContent>
                 {finishedSessions.map((s) => (
                   <SelectItem key={String(s.id)} value={String(s.id)}>
-                    {String(s.session_code)} — {Number(s.output_weight_kg).toLocaleString('uz-UZ')} kg chiqish
+                    {String(s.session_code)} — chiqish {fmtKg(s.output_weight_kg)}, kley {fmtKg(s.total_clay_used_kg)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -331,32 +421,135 @@ export default function ManufacturingPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Barcha sessiyalar</CardTitle></CardHeader>
-          <CardContent className="p-0">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Barcha sessiyalar — kley hisobi
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 pb-4">
             {loading ? (
               <div className="p-8 flex justify-center"><Loader2 className="animate-spin" /></div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Kod</TableHead>
-                    <TableHead>Holat</TableHead>
-                    <TableHead>Chiqish kg</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sessions.map((s) => (
-                    <TableRow key={String(s.id)}>
-                      <TableCell className="font-mono">{String(s.session_code)}</TableCell>
-                      <TableCell><Badge>{sessionStatusLabels[String(s.status)] || String(s.status)}</Badge></TableCell>
-                      <TableCell>{Number(s.output_weight_kg || 0).toLocaleString('uz-UZ')}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <>
+                <div className="md:hidden divide-y">
+                  {sessions.map((s) => {
+                    const st = sessionClaySummary(s);
+                    return (
+                      <div key={String(s.id)} className="p-4 space-y-2">
+                        <div className="flex justify-between">
+                          <span className="font-mono font-bold">{String(s.session_code)}</span>
+                          <Badge>{sessionStatusLabels[String(s.status)] || String(s.status)}</Badge>
+                        </div>
+                        <p className="text-xs font-mono text-slate-600">{String(s.bobin_qr)}</p>
+                        <p className="text-sm">
+                          Bobin {fmtKg(st.start)} → ishlatilgan {fmtKg(st.paperUsed)} · kley{' '}
+                          <strong>{fmtKg(st.clay)}</strong> · chiqish {fmtKg(st.output)}
+                        </p>
+                        {st.output > 0 && (
+                          <p className="text-xs text-blue-800">
+                            {fmtRatio(st.clayPerOutput)} kg kley / 1 kg chiqish ·{' '}
+                            {fmtRatio(st.clayPerPaper)} kg kley / 1 kg qog&apos;oz
+                          </p>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => openSessionDetail(String(s.id))}>
+                          Batafsil
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="hidden md:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Kod</TableHead>
+                        <TableHead>Bobin</TableHead>
+                        <TableHead>Bobin kg</TableHead>
+                        <TableHead>Ishl. qog&apos;oz</TableHead>
+                        <TableHead>Kley jami</TableHead>
+                        <TableHead>Chiqish</TableHead>
+                        <TableHead>Kley/kg chiqish</TableHead>
+                        <TableHead>Kley/kg qog&apos;oz</TableHead>
+                        <TableHead>Holat</TableHead>
+                        <TableHead />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sessions.map((s) => (
+                        <TableRow key={String(s.id)}>
+                          <TableCell className="font-mono text-xs">{String(s.session_code)}</TableCell>
+                          <TableCell className="font-mono text-xs">{String(s.bobin_qr || '—')}</TableCell>
+                          <TableCell>{fmtKg(s.bobin_weight_at_start_kg)}</TableCell>
+                          <TableCell>{fmtKg(s.bobin_used_kg)}</TableCell>
+                          <TableCell className="font-medium text-blue-700">
+                            {fmtKg(s.total_clay_used_kg)}
+                          </TableCell>
+                          <TableCell>{fmtKg(s.output_weight_kg)}</TableCell>
+                          <TableCell>{fmtRatio(s.clay_per_kg_output)}</TableCell>
+                          <TableCell>{fmtRatio(s.clay_per_kg_paper)}</TableCell>
+                          <TableCell>
+                            <Badge>{sessionStatusLabels[String(s.status)] || String(s.status)}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="ghost" onClick={() => openSessionDetail(String(s.id))}>
+                              Batafsil
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
+
+        <Dialog open={!!detailSession} onOpenChange={(o) => !o && setDetailSession(null)}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                {detailSession ? String(detailSession.session_code) : 'Sessiya'}
+              </DialogTitle>
+            </DialogHeader>
+            {detailLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
+            ) : detailSession ? (
+              <div className="space-y-4 text-sm">
+                <ProductionStatsGrid s={detailSession} />
+                <div>
+                  <p className="font-medium mb-2">Kley qo&apos;shishlar tarixi</p>
+                  {(detailSession.clayAdditions as Record<string, unknown>[])?.length ? (
+                    <ul className="space-y-1 border rounded-lg divide-y">
+                      {(detailSession.clayAdditions as Record<string, unknown>[]).map((a) => (
+                        <li key={String(a.id)} className="flex justify-between px-3 py-2">
+                          <span>
+                            {a.added_at
+                              ? new Date(String(a.added_at)).toLocaleString('uz-UZ')
+                              : '—'}
+                          </span>
+                          <span className="font-semibold">+{fmtKg(a.quantity_kg)}</span>
+                          <span className="text-slate-500">jami {fmtKg(a.cumulative_kg)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-slate-500">Hali kley qo&apos;shilmagan</p>
+                  )}
+                </div>
+                {detailSession.costReport && (
+                  <div className="rounded-lg bg-green-50 border border-green-200 p-3 space-y-1">
+                    <p className="font-medium text-green-900">Tannarx hisoboti (FINISH)</p>
+                    <p>Kley: {fmtKg((detailSession.costReport as Record<string, unknown>).clay_used_kg)}</p>
+                    <p>Qog&apos;oz ishlatilgan: {fmtKg((detailSession.costReport as Record<string, unknown>).paper_used_kg)}</p>
+                    <p>1 kg chiqish narxi: {Number((detailSession.costReport as Record<string, unknown>).cost_per_kg_output).toLocaleString('uz-UZ')} so&apos;m</p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </div>
     </RoleGuard>
   );

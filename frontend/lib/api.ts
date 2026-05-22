@@ -181,10 +181,22 @@ class ApiClient {
     sessionId: string,
     body: { outputWeightKg: number; bobinRemainingWeightKg: number }
   ) {
-    return this.request(`/production/sessions/${sessionId}/finish`, {
+    return this.request<{
+      session: Record<string, unknown>;
+      costReport: Record<string, unknown>;
+    }>(`/production/sessions/${sessionId}/finish`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  }
+
+  async getProductionSession(id: string) {
+    return this.request<
+      Record<string, unknown> & {
+        clayAdditions: Record<string, unknown>[];
+        costReport?: Record<string, unknown> | null;
+      }
+    >(`/production/sessions/${id}`);
   }
 
   // Cutting
