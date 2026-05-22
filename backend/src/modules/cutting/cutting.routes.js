@@ -5,9 +5,14 @@ import { checkPermission } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import * as svc from './cutting.service.js';
+import * as cw from '../costWorkers/costWorkers.service.js';
 
 export const cuttingRouter = Router();
 cuttingRouter.use(auth);
+
+cuttingRouter.get('/workers-pool', checkPermission('cutting:read'), asyncHandler(async (_req, res) => {
+  res.json(await cw.listWorkers('kesish'));
+}));
 
 cuttingRouter.get('/sessions', checkPermission('cutting:read'), asyncHandler(async (req, res) => {
   res.json(await svc.list(req.query));
@@ -45,6 +50,23 @@ cuttingRouter.post('/sessions/:id/finish', checkPermission('cutting:manage'), as
 
 cuttingRouter.get('/sessions/:id/waste-report', checkPermission('cutting:read'), asyncHandler(async (req, res) => {
   res.json(await svc.wasteReport(req.params.id));
+}));
+
+cuttingRouter.get('/packaging-preview', checkPermission('cutting:read'), validate(z.object({
+  query: z.object({ widthCm: z.coerce.number().positive() }),
+})), asyncHandler(async (req, res) => {
+  res.json(await svc.packagingPreview(req.validated.query.widthCm));
+}));
+
+cuttingRouter.put('/sessions/:id/workers', checkPermission('cutting:manage'), validate(z.object({
+  body: z.object({
+    workers: z.array(z.object({
+      workerId: z.string().uuid(),
+      kgPerMinute: z.number().positive(),
+    })),
+  }),
+})), asyncHandler(async (req, res) => {
+  res.json(await svc.setSessionWorkers(req.params.id, req.validated.body.workers));
 }));
 
 cuttingRouter.get('/sessions/:id', checkPermission('cutting:read'), asyncHandler(async (req, res) => {

@@ -2,6 +2,8 @@ import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 import { generateQrCode } from '../../utils/qr.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
+import { calcPackagingCost, calcSessionLaborCost, getCurrentCostConfig } from '../../utils/costCalc.js';
+import * as costWorkers from '../costWorkers/costWorkers.service.js';
 
 export async function start({ parentPaperQrCode, machineId, inputWeightKg }, cutterId) {
   const client = await db.getClient();
@@ -44,13 +46,17 @@ export async function addProduct(sessionId, data) {
   );
   if (!sess.rows.length) throw new AppError('Kesish sessiyasi topilmadi', 404);
 
+  const config = await getCurrentCostConfig();
+  const pack = calcPackagingCost(data.widthCm, config);
   const qr = data.qrCode || generateQrCode('CUT');
   const { rows } = await db.query(
-    `INSERT INTO cut_products (qr_code, cutting_session_id, parent_paper_id, width_cm, weight_kg, length_m, color, stock_status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,'kesildi') RETURNING *`,
+    `INSERT INTO cut_products (
+      qr_code, cutting_session_id, parent_paper_id, width_cm, billing_width_cm,
+      weight_kg, length_m, color, stock_status, packaging_cost
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'kesildi',$9) RETURNING *`,
     [
-      qr, sessionId, sess.rows[0].parent_paper_id, data.widthCm, data.weightKg,
-      data.lengthM || null, data.color || 'white',
+      qr, sessionId, sess.rows[0].parent_paper_id, data.widthCm, pack.billingWidthCm,
+      data.weightKg, data.lengthM || null, data.color || 'white', pack.cost,
     ]
   );
 
@@ -90,9 +96,30 @@ export async function finish(sessionId) {
     );
     if (!sess.rows.length) throw new AppError('Sessiya topilmadi', 404);
 
-    await client.query(
-      `UPDATE cutting_sessions SET status = 'tugallangan', finished_at = NOW() WHERE id = $1`,
+    const outKgRes = await client.query(
+      `SELECT COALESCE(SUM(weight_kg),0)::numeric AS total FROM cut_products WHERE cutting_session_id = $1`,
       [sessionId]
+    );
+    const labor = await calcSessionLaborCost(
+      sessionId,
+      outKgRes.rows[0].total,
+      'cutting_session_workers'
+    );
+    const packSum = await client.query(
+      `SELECT COALESCE(SUM(packaging_cost),0)::numeric AS total FROM cut_products WHERE cutting_session_id = $1`,
+      [sessionId]
+    );
+    const totalPack = Number(packSum.rows[0].total);
+    const totalLabor = labor.total;
+
+    await client.query(
+      `UPDATE cutting_sessions SET
+        status = 'tugallangan',
+        finished_at = NOW(),
+        total_labor_cost = $2,
+        total_packaging_cost = $3
+       WHERE id = $1`,
+      [sessionId, totalLabor, totalPack]
     );
     await client.query(
       `UPDATE parent_papers SET is_cut = true, updated_at = NOW() WHERE id = $1`,
@@ -117,7 +144,22 @@ export async function getById(id) {
   const sess = await db.query(`SELECT * FROM cutting_sessions WHERE id = $1`, [id]);
   if (!sess.rows.length) throw new AppError('Sessiya topilmadi', 404);
   const products = await db.query(`SELECT * FROM cut_products WHERE cutting_session_id = $1`, [id]);
-  return { ...sess.rows[0], products: products.rows };
+  const workers = await costWorkers.getCuttingWorkers(id);
+  return { ...sess.rows[0], products: products.rows, workers };
+}
+
+export async function setSessionWorkers(sessionId, workers) {
+  const sess = await db.query(`SELECT id, status FROM cutting_sessions WHERE id = $1`, [sessionId]);
+  if (!sess.rows.length) throw new AppError('Sessiya topilmadi', 404);
+  if (sess.rows[0].status !== 'boshlangan') {
+    throw new AppError('Faqat ochiq sessiyaga ishchi biriktirish mumkin', 400);
+  }
+  return costWorkers.setCuttingWorkers(sessionId, workers);
+}
+
+export async function packagingPreview(widthCm) {
+  const config = await getCurrentCostConfig();
+  return calcPackagingCost(widthCm, config);
 }
 
 export async function wasteReport(id) {

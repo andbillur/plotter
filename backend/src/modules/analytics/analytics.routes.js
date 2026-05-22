@@ -48,6 +48,8 @@ analyticsRouter.post('/cost-config', checkPermission('cost_config:manage'), vali
     electricityCostPerKg: z.number().optional(),
     laborCostPerKg: z.number().optional(),
     otherCostPerKg: z.number().optional(),
+    packagingPricePerMeter: z.number().positive().optional(),
+    workMinutesPerMonth: z.number().int().positive().optional(),
   }),
 })), asyncHandler(async (req, res) => {
   res.status(201).json(await svc.upsertCostConfig(req.validated.body, req.user.id));

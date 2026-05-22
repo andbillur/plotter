@@ -10,7 +10,15 @@ import { RoleGuard } from '@/components/layout/RoleGuard';
 import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { roleDisplayNames } from '@/lib/constants';
-import { Loader2, Save, Settings2, History, User } from 'lucide-react';
+import { Loader2, Save, Settings2, History, User, Plus, UserPlus } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { billingWidthCm, calcPackagingCost } from '@/lib/cost-calc';
 import { toast } from 'sonner';
 import {
   Table,
@@ -27,6 +35,8 @@ const DEFAULTS = {
   electricityCostPerKg: '150',
   laborCostPerKg: '200',
   otherCostPerKg: '0',
+  packagingPricePerMeter: '6000',
+  workMinutesPerMonth: '12480',
 };
 
 type CostForm = {
@@ -35,6 +45,14 @@ type CostForm = {
   electricityCostPerKg: string;
   laborCostPerKg: string;
   otherCostPerKg: string;
+  packagingPricePerMeter: string;
+  workMinutesPerMonth: string;
+};
+
+const DEPT_LABELS: Record<string, string> = {
+  ishlab_chiqarish: 'Ishlab chiqarish',
+  kesish: 'Kesish',
+  qadoqlash: 'Qadoqlash',
 };
 
 function configToForm(c: Record<string, unknown> | null): CostForm {
@@ -45,6 +63,8 @@ function configToForm(c: Record<string, unknown> | null): CostForm {
     electricityCostPerKg: String(c.electricity_cost_per_kg ?? DEFAULTS.electricityCostPerKg),
     laborCostPerKg: String(c.labor_cost_per_kg ?? DEFAULTS.laborCostPerKg),
     otherCostPerKg: String(c.other_cost_per_kg ?? DEFAULTS.otherCostPerKg),
+    packagingPricePerMeter: String(c.packaging_price_per_meter ?? DEFAULTS.packagingPricePerMeter),
+    workMinutesPerMonth: String(c.work_minutes_per_month ?? DEFAULTS.workMinutesPerMonth),
   };
 }
 
@@ -73,18 +93,31 @@ export default function SettingsPage() {
   const [history, setHistory] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [workers, setWorkers] = useState<Record<string, unknown>[]>([]);
+  const [workerForm, setWorkerForm] = useState({
+    fullName: '',
+    monthlySalary: '',
+    department: 'ishlab_chiqarish' as 'ishlab_chiqarish' | 'kesish' | 'qadoqlash',
+  });
+  const [addingWorker, setAddingWorker] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([apiClient.getCostConfig(), apiClient.getCostConfigHistory(8)])
-      .then(([cfg, hist]) => {
+    Promise.all([
+      apiClient.getCostConfig(),
+      apiClient.getCostConfigHistory(8),
+      apiClient.getCostWorkers().catch(() => []),
+    ])
+      .then(([cfg, hist, w]) => {
         setCurrent(cfg);
         setForm(configToForm(cfg));
         setHistory(hist);
+        setWorkers(w);
       })
       .catch(() => {
         setForm({ ...DEFAULTS });
         setHistory([]);
+        setWorkers([]);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -100,6 +133,8 @@ export default function SettingsPage() {
     const electricityCostPerKg = parseFloat(form.electricityCostPerKg) || 0;
     const laborCostPerKg = parseFloat(form.laborCostPerKg) || 0;
     const otherCostPerKg = parseFloat(form.otherCostPerKg) || 0;
+    const packagingPricePerMeter = parseFloat(form.packagingPricePerMeter) || 6000;
+    const workMinutesPerMonth = parseInt(form.workMinutesPerMonth, 10) || 12480;
 
     if (!paperPricePerKg || !clayPricePerKg) {
       toast.error('Qog\'oz va kley narxi majburiy');
@@ -114,6 +149,8 @@ export default function SettingsPage() {
         electricityCostPerKg,
         laborCostPerKg,
         otherCostPerKg,
+        packagingPricePerMeter,
+        workMinutesPerMonth,
       });
       setCurrent(saved);
       toast.success('Tannarx saqlandi — yangi ishlab chiqarish hisobotlarida qo\'llanadi');
@@ -122,6 +159,31 @@ export default function SettingsPage() {
       toast.error(err instanceof Error ? err.message : 'Saqlash xatoligi');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const packPreview = calcPackagingCost(202, parseFloat(form.packagingPricePerMeter) || 6000);
+
+  const handleAddWorker = async () => {
+    const monthlySalary = parseFloat(workerForm.monthlySalary);
+    if (!workerForm.fullName.trim() || !monthlySalary) {
+      toast.error('Ism va oylik majburiy');
+      return;
+    }
+    setAddingWorker(true);
+    try {
+      await apiClient.createCostWorker({
+        fullName: workerForm.fullName.trim(),
+        monthlySalary,
+        department: workerForm.department,
+      });
+      toast.success('Ishchi qo\'shildi');
+      setWorkerForm({ fullName: '', monthlySalary: '', department: 'ishlab_chiqarish' });
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    } finally {
+      setAddingWorker(false);
     }
   };
 
@@ -244,6 +306,32 @@ export default function SettingsPage() {
                       onChange={(e) => setForm({ ...form, laborCostPerKg: e.target.value })}
                     />
                   </div>
+                  <div>
+                    <Label>Qadoqlash (salafan/karton) — 1 metr narxi</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      className="min-h-[44px] mt-1"
+                      value={form.packagingPricePerMeter}
+                      onChange={(e) => setForm({ ...form, packagingPricePerMeter: e.target.value })}
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      202 sm → {billingWidthCm(202)} sm = 2 m × narx. Misol: {formatMoney(packPreview.cost)}
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Oyda ish minutlari (ish haqi hisobi)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      step="1"
+                      className="min-h-[44px] mt-1"
+                      value={form.workMinutesPerMonth}
+                      onChange={(e) => setForm({ ...form, workMinutesPerMonth: e.target.value })}
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Standart: 8 soat × 26 kun ≈ 12480</p>
+                  </div>
                   <div className="sm:col-span-2">
                     <Label>Boshqa xarajatlar (1 kg)</Label>
                     <Input
@@ -275,6 +363,81 @@ export default function SettingsPage() {
                   Saqlash
                 </Button>
               </form>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Ishchilar (oylik maosh)
+            </CardTitle>
+            <CardDescription>
+              Ishlab chiqarish va kesish sessiyalarida biriktirasiz; kg/min kiriting — FINISH da ish haqi hisoblanadi.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2">
+                <Label>F.I.Sh</Label>
+                <Input
+                  value={workerForm.fullName}
+                  onChange={(e) => setWorkerForm({ ...workerForm, fullName: e.target.value })}
+                  placeholder="Aliyev Vali"
+                />
+              </div>
+              <div>
+                <Label>Oylik (so&apos;m)</Label>
+                <Input
+                  type="number"
+                  value={workerForm.monthlySalary}
+                  onChange={(e) => setWorkerForm({ ...workerForm, monthlySalary: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Bo&apos;lim</Label>
+                <Select
+                  value={workerForm.department}
+                  onValueChange={(v) =>
+                    setWorkerForm({
+                      ...workerForm,
+                      department: v as 'ishlab_chiqarish' | 'kesish' | 'qadoqlash',
+                    })
+                  }
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(DEPT_LABELS).map(([k, label]) => (
+                      <SelectItem key={k} value={k}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button type="button" onClick={handleAddWorker} disabled={addingWorker}>
+              {addingWorker ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              Ishchi qo&apos;shish
+            </Button>
+            {workers.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Ism</TableHead>
+                    <TableHead>Bo&apos;lim</TableHead>
+                    <TableHead>Oylik</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {workers.filter((w) => w.is_active !== false).map((w) => (
+                    <TableRow key={String(w.id)}>
+                      <TableCell>{String(w.full_name)}</TableCell>
+                      <TableCell>{DEPT_LABELS[String(w.department)] || String(w.department)}</TableCell>
+                      <TableCell>{formatMoney(Number(w.monthly_salary))}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>

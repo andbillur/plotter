@@ -19,6 +19,7 @@ import {
 import { PrintQrButton } from '@/components/PrintQrButton';
 import { Play, Square, Droplets, Loader2, Scissors, Plus, BarChart3 } from 'lucide-react';
 import { fmtKg, fmtRatio, sessionClaySummary } from '@/lib/production-stats';
+import { SessionWorkersPanel } from '@/components/SessionWorkersPanel';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -309,6 +310,18 @@ export default function ManufacturingPage() {
                       ` · ${fmtKg(s.bobin_consumed_so_far_kg)} ishlatildi`}
                   </p>
                   <ProductionStatsGrid s={s} />
+                  <SessionWorkersPanel
+                    sessionId={String(s.id)}
+                    loadPool={() => apiClient.getProductionWorkersPool() as Promise<{ id: string; full_name: string; monthly_salary: number }[]>}
+                    loadAssigned={async () => {
+                      const d = await apiClient.getProductionSession(String(s.id));
+                      const w = (d.workers || []) as { id: string; full_name: string; kg_per_minute: number }[];
+                      return w;
+                    }}
+                    onSave={(workers) =>
+                      apiClient.setProductionSessionWorkers(String(s.id), workers).then(() => undefined)
+                    }
+                  />
                   <div className="flex flex-wrap gap-2 items-end">
                     <div className="flex gap-2 items-center">
                       <Input
@@ -543,6 +556,14 @@ export default function ManufacturingPage() {
                     <p className="font-medium text-green-900">Tannarx hisoboti (FINISH)</p>
                     <p>Kley: {fmtKg((detailSession.costReport as Record<string, unknown>).clay_used_kg)}</p>
                     <p>Qog&apos;oz ishlatilgan: {fmtKg((detailSession.costReport as Record<string, unknown>).paper_used_kg)}</p>
+                    <p>
+                      Ish haqi (ishchilar):{' '}
+                      {Number((detailSession.costReport as Record<string, unknown>).labor_workers_cost || 0).toLocaleString('uz-UZ')} so&apos;m
+                    </p>
+                    <p>
+                      Jami tannarx:{' '}
+                      {Number((detailSession.costReport as Record<string, unknown>).grand_total_cost || 0).toLocaleString('uz-UZ')} so&apos;m
+                    </p>
                     <p>1 kg chiqish narxi: {Number((detailSession.costReport as Record<string, unknown>).cost_per_kg_output).toLocaleString('uz-UZ')} so&apos;m</p>
                   </div>
                 )}

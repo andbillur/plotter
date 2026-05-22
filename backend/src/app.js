@@ -15,6 +15,7 @@ import { analyticsRouter } from './modules/analytics/analytics.routes.js';
 import { qrRouter } from './modules/qr/qr.routes.js';
 import { warehouseRouter } from './modules/warehouse/warehouse.routes.js';
 import { shipmentsRouter } from './modules/shipments/shipments.routes.js';
+import { costWorkersRouter } from './modules/costWorkers/costWorkers.routes.js';
 import { AppError } from './utils/errors.js';
 
 const app = express();
@@ -47,6 +48,7 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/qr', qrRouter);
 app.use('/api/warehouse', warehouseRouter);
 app.use('/api/shipments', shipmentsRouter);
+app.use('/api/cost-workers', costWorkersRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

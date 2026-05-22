@@ -112,12 +112,16 @@ export async function upsertCostConfig(data, userId) {
   const { rows } = await db.query(
     `INSERT INTO cost_config (
       paper_price_per_kg, clay_price_per_kg, electricity_cost_per_kg,
-      labor_cost_per_kg, other_cost_per_kg, created_by
-    ) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      labor_cost_per_kg, other_cost_per_kg,
+      packaging_price_per_meter, work_minutes_per_month, created_by
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [
       data.paperPricePerKg, data.clayPricePerKg,
       data.electricityCostPerKg || 0, data.laborCostPerKg || 0,
-      data.otherCostPerKg || 0, userId,
+      data.otherCostPerKg || 0,
+      data.packagingPricePerMeter ?? 6000,
+      data.workMinutesPerMonth ?? 12480,
+      userId,
     ]
   );
   return rows[0];
@@ -131,7 +135,8 @@ export async function currentCostConfig() {
 export async function listCostConfigHistory(limit = 8) {
   const { rows } = await db.query(
     `SELECT id, paper_price_per_kg, clay_price_per_kg, electricity_cost_per_kg,
-            labor_cost_per_kg, other_cost_per_kg, currency, valid_from, created_at
+            labor_cost_per_kg, other_cost_per_kg, packaging_price_per_meter,
+            work_minutes_per_month, currency, valid_from, created_at
      FROM cost_config ORDER BY valid_from DESC LIMIT $1`,
     [limit]
   );

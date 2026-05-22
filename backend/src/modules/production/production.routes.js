@@ -5,9 +5,14 @@ import { checkPermission } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import * as svc from './production.service.js';
+import * as cw from '../costWorkers/costWorkers.service.js';
 
 export const productionRouter = Router();
 productionRouter.use(auth);
+
+productionRouter.get('/workers-pool', checkPermission('production:read'), asyncHandler(async (_req, res) => {
+  res.json(await cw.listWorkers('ishlab_chiqarish'));
+}));
 
 productionRouter.get('/sessions/active', checkPermission('production:read'), asyncHandler(async (_req, res) => {
   res.json(await svc.listActive());
@@ -47,6 +52,17 @@ productionRouter.patch('/sessions/:id/cancel', checkPermission('production:cance
 
 productionRouter.get('/sessions/:id/cost', checkPermission('production:read'), asyncHandler(async (req, res) => {
   res.json(await svc.getCost(req.params.id));
+}));
+
+productionRouter.put('/sessions/:id/workers', checkPermission('production:start'), validate(z.object({
+  body: z.object({
+    workers: z.array(z.object({
+      workerId: z.string().uuid(),
+      kgPerMinute: z.number().positive(),
+    })),
+  }),
+})), asyncHandler(async (req, res) => {
+  res.json(await svc.setSessionWorkers(req.params.id, req.validated.body.workers));
 }));
 
 productionRouter.get('/sessions/:id', checkPermission('production:read'), asyncHandler(async (req, res) => {

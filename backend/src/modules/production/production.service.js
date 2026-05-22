@@ -1,6 +1,8 @@
 import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
+import { calcSessionLaborCost } from '../../utils/costCalc.js';
+import * as costWorkers from '../costWorkers/costWorkers.service.js';
 
 /** Qoldiq bor-yo'qligini tekshirish (kg) */
 const MIN_BOBIN_REMAINING_KG = 0.01;
@@ -151,18 +153,34 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
     const cfg = await client.query(`SELECT id FROM cost_config ORDER BY valid_from DESC LIMIT 1`);
     const c = cost.rows[0];
 
+    const laborWorkers = await calcSessionLaborCost(
+      sessionId,
+      outputWeightKg,
+      'production_session_workers'
+    );
+    const laborFinal =
+      laborWorkers.total > 0 ? laborWorkers.total : Number(c.labor_cost);
+    const grandTotal =
+      Number(c.paper_cost) +
+      Number(c.clay_cost) +
+      Number(c.electricity_cost) +
+      laborFinal +
+      Number(c.other_cost);
+    const outKg = Number(c.output_kg) || Number(outputWeightKg);
+    const costPerKg = outKg > 0 ? grandTotal / outKg : 0;
+
     await client.query(
       `INSERT INTO production_cost_reports (
         session_id, cost_config_id, paper_used_kg, clay_used_kg, output_weight_kg,
         clay_per_kg_paper, paper_cost_total, clay_cost_total, electricity_cost_total,
-        labor_cost_total, other_cost_total, grand_total_cost, cost_per_kg_output,
+        labor_cost_total, labor_workers_cost, other_cost_total, grand_total_cost, cost_per_kg_output,
         waste_kg, waste_percent
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       [
         sessionId, cfg.rows[0].id,
         c.paper_used_kg, c.clay_used_kg, c.output_kg, c.clay_ratio,
-        c.paper_cost, c.clay_cost, c.electricity_cost, c.labor_cost, c.other_cost,
-        c.grand_total, c.cost_per_kg, c.waste_kg, c.waste_percent,
+        c.paper_cost, c.clay_cost, c.electricity_cost, laborFinal, laborWorkers.total,
+        c.other_cost, grandTotal, costPerKg, c.waste_kg, c.waste_percent,
       ]
     );
 
@@ -233,7 +251,17 @@ export async function getById(id) {
     );
     costReport = cost.rows[0] || null;
   }
-  return { ...rows[0], clayAdditions: clay.rows, costReport };
+  const workers = await costWorkers.getProductionWorkers(id);
+  return { ...rows[0], clayAdditions: clay.rows, costReport, workers };
+}
+
+export async function setSessionWorkers(sessionId, workers) {
+  const sess = await db.query(`SELECT id, status FROM production_sessions WHERE id = $1`, [sessionId]);
+  if (!sess.rows.length) throw new AppError('Sessiya topilmadi', 404);
+  if (sess.rows[0].status !== 'boshlangan') {
+    throw new AppError('Faqat ochiq sessiyaga ishchi biriktirish mumkin', 400);
+  }
+  return costWorkers.setProductionWorkers(sessionId, workers);
 }
 
 export async function getCost(id) {

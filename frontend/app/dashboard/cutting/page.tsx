@@ -13,6 +13,9 @@ import { PrintQrButton } from '@/components/PrintQrButton';
 import { Play, Plus, CheckCircle, Loader2, Info, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { SessionWorkersPanel } from '@/components/SessionWorkersPanel';
+import { calcPackagingCost } from '@/lib/cost-calc';
+import { useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const COLORS = ['white', 'cream', 'blue', 'grey', 'other'];
@@ -27,6 +30,19 @@ export default function CuttingPage() {
   const [inputKg, setInputKg] = useState('');
   const [selectedPaper, setSelectedPaper] = useState<Record<string, unknown> | null>(null);
   const [prodForm, setProdForm] = useState({ widthCm: '', weightKg: '', color: 'white' });
+  const [packPricePerM, setPackPricePerM] = useState(6000);
+
+  useEffect(() => {
+    apiClient.getCostConfig().then((c) => {
+      if (c?.packaging_price_per_meter) setPackPricePerM(Number(c.packaging_price_per_meter));
+    }).catch(() => {});
+  }, []);
+
+  const packPreview = useMemo(() => {
+    const w = parseFloat(prodForm.widthCm);
+    if (!w || w <= 0) return null;
+    return calcPackagingCost(w, packPricePerM);
+  }, [prodForm.widthCm, packPricePerM]);
 
   const load = useCallback(() => {
     Promise.all([
@@ -262,6 +278,18 @@ export default function CuttingPage() {
               <CardTitle>Faol: {String(activeSession.session_code)} — Brak: {Number(activeSession.waste_percent || 0).toFixed(1)}%</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <SessionWorkersPanel
+                sessionId={String(activeSession.id)}
+                loadPool={() => apiClient.getCuttingWorkersPool() as Promise<{ id: string; full_name: string; monthly_salary: number }[]>}
+                loadAssigned={async () => {
+                  const d = await apiClient.getCuttingSession(String(activeSession.id));
+                  const w = (d.workers || []) as { id: string; full_name: string; kg_per_minute: number }[];
+                  return w;
+                }}
+                onSave={(workers) =>
+                  apiClient.setCuttingSessionWorkers(String(activeSession.id), workers).then(() => undefined)
+                }
+              />
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <Label>Eni (sm)</Label>
@@ -280,6 +308,16 @@ export default function CuttingPage() {
                   <Button onClick={handleAddProduct} className="w-full"><Plus className="h-4 w-4 mr-1" />O&apos;ram</Button>
                 </div>
               </div>
+              {packPreview && (
+                <p className="text-sm text-orange-900 bg-white/80 border border-orange-200 rounded p-2">
+                  Qadoqlash: {prodForm.widthCm} sm → hisobda <strong>{packPreview.billingWidthCm} sm</strong> (
+                  {packPreview.meters} m) × {packPreview.pricePerMeter.toLocaleString('uz-UZ')} ={' '}
+                  <strong>{packPreview.cost.toLocaleString('uz-UZ')} so&apos;m</strong>
+                  <span className="text-xs block mt-1 text-slate-600">
+                    Narxni Sozlamalar → Qadoqlash (1 metr) dan o&apos;zgartirasiz
+                  </span>
+                </p>
+              )}
               <Button variant="default" onClick={handleFinish}><CheckCircle className="h-4 w-4 mr-1" />Kesishni tugatish</Button>
               <Table>
                 <TableHeader>
@@ -288,6 +326,7 @@ export default function CuttingPage() {
                     <TableHead>Eni</TableHead>
                     <TableHead>kg</TableHead>
                     <TableHead>Rang</TableHead>
+                    <TableHead>Qadoqlash</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -304,9 +343,17 @@ export default function CuttingPage() {
                           />
                         </span>
                       </TableCell>
-                      <TableCell>{p.width_cm} sm</TableCell>
+                      <TableCell>
+                        {p.width_cm} sm
+                        {p.billing_width_cm != null && Number(p.billing_width_cm) !== Number(p.width_cm) && (
+                          <span className="text-xs text-slate-500 block">→ {p.billing_width_cm} sm</span>
+                        )}
+                      </TableCell>
                       <TableCell>{p.weight_kg}</TableCell>
                       <TableCell>{String(p.color)}</TableCell>
+                      <TableCell className="text-xs">
+                        {Number(p.packaging_cost || 0).toLocaleString('uz-UZ')} so&apos;m
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

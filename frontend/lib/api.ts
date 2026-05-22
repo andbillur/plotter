@@ -371,11 +371,83 @@ class ApiClient {
     electricityCostPerKg?: number;
     laborCostPerKg?: number;
     otherCostPerKg?: number;
+    packagingPricePerMeter?: number;
+    workMinutesPerMonth?: number;
   }) {
     return this.request<Record<string, unknown>>('/analytics/cost-config', {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  }
+
+  async getCostWorkers() {
+    return this.request<Record<string, unknown>[]>('/cost-workers');
+  }
+
+  async createCostWorker(body: {
+    fullName: string;
+    monthlySalary: number;
+    department: 'ishlab_chiqarish' | 'kesish' | 'qadoqlash';
+    notes?: string;
+  }) {
+    return this.request<Record<string, unknown>>('/cost-workers', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async updateCostWorker(
+    id: string,
+    body: Partial<{
+      fullName: string;
+      monthlySalary: number;
+      department: 'ishlab_chiqarish' | 'kesish' | 'qadoqlash';
+      isActive: boolean;
+      notes: string;
+    }>
+  ) {
+    return this.request<Record<string, unknown>>(`/cost-workers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getProductionWorkersPool() {
+    return this.request<Record<string, unknown>[]>('/production/workers-pool');
+  }
+
+  async setProductionSessionWorkers(
+    sessionId: string,
+    workers: { workerId: string; kgPerMinute: number }[]
+  ) {
+    return this.request(`/production/sessions/${sessionId}/workers`, {
+      method: 'PUT',
+      body: JSON.stringify({ workers }),
+    });
+  }
+
+  async getCuttingWorkersPool() {
+    return this.request<Record<string, unknown>[]>('/cutting/workers-pool');
+  }
+
+  async setCuttingSessionWorkers(
+    sessionId: string,
+    workers: { workerId: string; kgPerMinute: number }[]
+  ) {
+    return this.request(`/cutting/sessions/${sessionId}/workers`, {
+      method: 'PUT',
+      body: JSON.stringify({ workers }),
+    });
+  }
+
+  async getPackagingPreview(widthCm: number) {
+    return this.request<{
+      billingWidthCm: number;
+      actualWidthCm: number;
+      meters: number;
+      pricePerMeter: number;
+      cost: number;
+    }>(`/cutting/packaging-preview?widthCm=${widthCm}`);
   }
 
   // Users
