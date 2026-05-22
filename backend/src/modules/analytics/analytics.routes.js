@@ -13,6 +13,31 @@ analyticsRouter.get('/dashboard', checkPermission('analytics:dashboard'), asyncH
   res.json(await svc.dashboard());
 }));
 
+analyticsRouter.get('/bi', checkPermission('analytics:dashboard'), asyncHandler(async (req, res) => {
+  res.json(await svc.biDashboard(req.query));
+}));
+
+analyticsRouter.get('/powerbi/config', checkPermission('analytics:dashboard'), asyncHandler(async (_req, res) => {
+  res.json(await svc.getPowerBiConfig());
+}));
+
+analyticsRouter.put('/powerbi/config', checkPermission('cost_config:manage'), validate(z.object({
+  body: z.object({
+    embedUrl: z.string().optional(),
+    title: z.string().optional(),
+  }),
+})), asyncHandler(async (req, res) => {
+  res.json(await svc.setPowerBiConfig(req.validated.body, req.user.id));
+}));
+
+analyticsRouter.delete('/powerbi/public-embed', checkPermission('cost_config:manage'), asyncHandler(async (req, res) => {
+  res.json(await svc.clearPublicPowerBiEmbed(req.user.id));
+}));
+
+analyticsRouter.get('/powerbi/connection', checkPermission('analytics:dashboard'), asyncHandler(async (_req, res) => {
+  res.json(svc.powerBiConnectionHint());
+}));
+
 analyticsRouter.get('/production', checkPermission('production:read'), asyncHandler(async (req, res) => {
   res.json(await svc.productionStats(req.query));
 }));

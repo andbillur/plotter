@@ -22,6 +22,9 @@ services:
         value: 7d
       - key: CORS_ORIGIN
         sync: false
+      # Ochiq Power BI embed o'chiq (sir). Faqat ALLOW_POWERBI_PUBLIC_EMBED=true bo'lsa yoqiladi.
+      - key: ALLOW_POWERBI_PUBLIC_EMBED
+        value: "false"
 
   - type: web
     name: plotter-crm-web

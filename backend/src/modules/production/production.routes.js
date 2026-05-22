@@ -10,7 +10,7 @@ import * as cw from '../costWorkers/costWorkers.service.js';
 export const productionRouter = Router();
 productionRouter.use(auth);
 
-productionRouter.get('/workers-pool', checkPermission('production:read'), asyncHandler(async (_req, res) => {
+productionRouter.get('/workers-pool', checkPermission('cost_config:manage'), asyncHandler(async (_req, res) => {
   res.json(await cw.listWorkers('ishlab_chiqarish'));
 }));
 
@@ -54,7 +54,7 @@ productionRouter.get('/sessions/:id/cost', checkPermission('production:read'), a
   res.json(await svc.getCost(req.params.id));
 }));
 
-productionRouter.put('/sessions/:id/workers', checkPermission('production:start'), validate(z.object({
+productionRouter.put('/sessions/:id/workers', checkPermission('cost_config:manage'), validate(z.object({
   body: z.object({
     workers: z.array(z.object({
       workerId: z.string().uuid(),

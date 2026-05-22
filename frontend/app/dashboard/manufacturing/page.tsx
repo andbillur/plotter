@@ -20,6 +20,8 @@ import { PrintQrButton } from '@/components/PrintQrButton';
 import { Play, Square, Droplets, Loader2, Scissors, Plus, BarChart3 } from 'lucide-react';
 import { fmtKg, fmtRatio, sessionClaySummary } from '@/lib/production-stats';
 import { SessionWorkersPanel } from '@/components/SessionWorkersPanel';
+import { useAuthStore } from '@/lib/store';
+import { isCostAdmin } from '@/lib/admin';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -62,6 +64,8 @@ function ProductionStatsGrid({ s }: { s: Record<string, unknown> }) {
 }
 
 export default function ManufacturingPage() {
+  const user = useAuthStore((s) => s.user);
+  const showWorkersPanel = isCostAdmin(user);
   const [sessions, setSessions] = useState<Record<string, unknown>[]>([]);
   const [active, setActive] = useState<Record<string, unknown>[]>([]);
   const [machines, setMachines] = useState<Record<string, unknown>[]>([]);
@@ -310,18 +314,28 @@ export default function ManufacturingPage() {
                       ` · ${fmtKg(s.bobin_consumed_so_far_kg)} ishlatildi`}
                   </p>
                   <ProductionStatsGrid s={s} />
-                  <SessionWorkersPanel
-                    sessionId={String(s.id)}
-                    loadPool={() => apiClient.getProductionWorkersPool() as Promise<{ id: string; full_name: string; monthly_salary: number }[]>}
-                    loadAssigned={async () => {
-                      const d = await apiClient.getProductionSession(String(s.id));
-                      const w = (d.workers || []) as { id: string; full_name: string; kg_per_minute: number }[];
-                      return w;
-                    }}
-                    onSave={(workers) =>
-                      apiClient.setProductionSessionWorkers(String(s.id), workers).then(() => undefined)
-                    }
-                  />
+                  {showWorkersPanel && (
+                    <SessionWorkersPanel
+                      sessionId={String(s.id)}
+                      loadPool={() =>
+                        apiClient.getProductionWorkersPool() as Promise<
+                          { id: string; full_name: string; monthly_salary: number }[]
+                        >
+                      }
+                      loadAssigned={async () => {
+                        const d = await apiClient.getProductionSession(String(s.id));
+                        const w = (d.workers || []) as {
+                          id: string;
+                          full_name: string;
+                          kg_per_minute: number;
+                        }[];
+                        return w;
+                      }}
+                      onSave={(workers) =>
+                        apiClient.setProductionSessionWorkers(String(s.id), workers).then(() => undefined)
+                      }
+                    />
+                  )}
                   <div className="flex flex-wrap gap-2 items-end">
                     <div className="flex gap-2 items-center">
                       <Input

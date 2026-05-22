@@ -22,7 +22,7 @@ export const navigationItems = [
   { id: 'warehouse', label: 'Tayyor mahsulot', href: '/dashboard/warehouse', icon: 'warehouse', permission: 'warehouse:read' },
   { id: 'shipments', label: 'Jo\'natmalar', href: '/dashboard/shipments', icon: 'shipment', permission: 'shipment:read' },
   { id: 'qr', label: 'QR Skaner', href: '/dashboard/qr-scanner', icon: 'qr', permission: null },
-  { id: 'reports', label: 'Hisobotlar', href: '/dashboard/reports', icon: 'reports', permission: 'analytics:dashboard' },
+  { id: 'analytics', label: 'Analitika', href: '/dashboard/analytics', icon: 'reports', permission: 'analytics:dashboard' },
   { id: 'employees', label: 'Foydalanuvchilar', href: '/dashboard/employees', icon: 'users', permission: 'users:manage' },
   { id: 'settings', label: 'Sozlamalar', href: '/dashboard/settings', icon: 'settings', permission: 'cost_config:manage' },
 ];

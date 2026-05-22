@@ -7,20 +7,57 @@ import { apiClient } from '@/lib/api';
 import { roleDisplayNames } from '@/lib/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Package, Factory, Droplets, Layers, Loader2 } from 'lucide-react';
+import { Package, Factory, Droplets, Layers, Loader2, BarChart3 } from 'lucide-react';
+import { BiCharts, type BiData } from '@/components/analytics/BiCharts';
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const [stats, setStats] = useState<Record<string, unknown> | null>(null);
+  const [bi, setBi] = useState<BiData | null>(null);
   const [loading, setLoading] = useState(true);
+  const showBi =
+    user?.role === 'super_admin' ||
+    user?.role === 'direktor' ||
+    (user?.permissions?.includes('analytics:dashboard') ?? false);
 
   useEffect(() => {
-    apiClient
-      .getDashboard()
-      .then(setStats)
-      .catch(() => setStats(null))
-      .finally(() => setLoading(false));
-  }, []);
+    if (!user) return;
+    const tasks: Promise<void>[] = [
+      apiClient
+        .getDashboard()
+        .then(setStats)
+        .catch(() => setStats(null))
+        .then(() => undefined),
+    ];
+    if (showBi) {
+      tasks.push(
+        apiClient
+          .getBiDashboard(30)
+          .then((d) => {
+            setBi({
+              productionDaily: (d.productionDaily || []) as BiData['productionDaily'],
+              costBreakdown: {
+                paper: Number((d.costBreakdown as Record<string, number>)?.paper) || 0,
+                clay: Number((d.costBreakdown as Record<string, number>)?.clay) || 0,
+                electricity: Number((d.costBreakdown as Record<string, number>)?.electricity) || 0,
+                labor: Number((d.costBreakdown as Record<string, number>)?.labor) || 0,
+                labor_workers: Number((d.costBreakdown as Record<string, number>)?.labor_workers) || 0,
+                other: Number((d.costBreakdown as Record<string, number>)?.other) || 0,
+                grand_total: Number((d.costBreakdown as Record<string, number>)?.grand_total) || 0,
+              },
+              costPerKgTrend: (d.costPerKgTrend || []) as BiData['costPerKgTrend'],
+              wasteDaily: (d.wasteDaily || []) as BiData['wasteDaily'],
+              warehouseStock: (d.warehouseStock || []) as BiData['warehouseStock'],
+              packagingDaily: (d.packagingDaily || []) as BiData['packagingDaily'],
+              clayTrend: (d.clayTrend || []) as BiData['clayTrend'],
+            });
+          })
+          .catch(() => setBi(null))
+          .then(() => undefined)
+      );
+    }
+    Promise.all(tasks).finally(() => setLoading(false));
+  }, [showBi, user]);
 
   const production = stats?.production as Record<string, number> | undefined;
   const plots = stats?.plots as Record<string, number> | undefined;
@@ -76,6 +113,23 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {showBi && bi && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-blue-600" />
+              Analitika (30 kun)
+            </h2>
+            <Link href="/dashboard/analytics">
+              <Button variant="outline" size="sm">
+                To&apos;liq analitika
+              </Button>
+            </Link>
+          </div>
+          <BiCharts data={bi} compact />
         </div>
       )}
 

@@ -10,14 +10,8 @@ import { RoleGuard } from '@/components/layout/RoleGuard';
 import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { roleDisplayNames } from '@/lib/constants';
-import { Loader2, Save, Settings2, History, User, Plus, UserPlus } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Loader2, Save, Settings2, History, User, UserPlus } from 'lucide-react';
+import { CostWorkersAdmin } from '@/components/CostWorkersAdmin';
 import { billingWidthCm, calcPackagingCost } from '@/lib/cost-calc';
 import { toast } from 'sonner';
 import {
@@ -47,12 +41,6 @@ type CostForm = {
   otherCostPerKg: string;
   packagingPricePerMeter: string;
   workMinutesPerMonth: string;
-};
-
-const DEPT_LABELS: Record<string, string> = {
-  ishlab_chiqarish: 'Ishlab chiqarish',
-  kesish: 'Kesish',
-  qadoqlash: 'Qadoqlash',
 };
 
 function configToForm(c: Record<string, unknown> | null): CostForm {
@@ -94,13 +82,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [workers, setWorkers] = useState<Record<string, unknown>[]>([]);
-  const [workerForm, setWorkerForm] = useState({
-    fullName: '',
-    monthlySalary: '',
-    department: 'ishlab_chiqarish' as 'ishlab_chiqarish' | 'kesish' | 'qadoqlash',
-  });
-  const [addingWorker, setAddingWorker] = useState(false);
-
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -163,29 +144,6 @@ export default function SettingsPage() {
   };
 
   const packPreview = calcPackagingCost(202, parseFloat(form.packagingPricePerMeter) || 6000);
-
-  const handleAddWorker = async () => {
-    const monthlySalary = parseFloat(workerForm.monthlySalary);
-    if (!workerForm.fullName.trim() || !monthlySalary) {
-      toast.error('Ism va oylik majburiy');
-      return;
-    }
-    setAddingWorker(true);
-    try {
-      await apiClient.createCostWorker({
-        fullName: workerForm.fullName.trim(),
-        monthlySalary,
-        department: workerForm.department,
-      });
-      toast.success('Ishchi qo\'shildi');
-      setWorkerForm({ fullName: '', monthlySalary: '', department: 'ishlab_chiqarish' });
-      load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Xatolik');
-    } finally {
-      setAddingWorker(false);
-    }
-  };
 
   const previewPerKg =
     (parseFloat(form.paperPricePerKg) || 0) +
@@ -374,71 +332,12 @@ export default function SettingsPage() {
               Ishchilar (oylik maosh)
             </CardTitle>
             <CardDescription>
-              Ishlab chiqarish va kesish sessiyalarida biriktirasiz; kg/min kiriting — FINISH da ish haqi hisoblanadi.
+              Faqat admin: oylik va bo&apos;lim (soha) tahrirlash. Sessiyaga biriktirish — Ishlab chiqarish /
+              Kesish (admin ko&apos;radi).
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <Label>F.I.Sh</Label>
-                <Input
-                  value={workerForm.fullName}
-                  onChange={(e) => setWorkerForm({ ...workerForm, fullName: e.target.value })}
-                  placeholder="Aliyev Vali"
-                />
-              </div>
-              <div>
-                <Label>Oylik (so&apos;m)</Label>
-                <Input
-                  type="number"
-                  value={workerForm.monthlySalary}
-                  onChange={(e) => setWorkerForm({ ...workerForm, monthlySalary: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Bo&apos;lim</Label>
-                <Select
-                  value={workerForm.department}
-                  onValueChange={(v) =>
-                    setWorkerForm({
-                      ...workerForm,
-                      department: v as 'ishlab_chiqarish' | 'kesish' | 'qadoqlash',
-                    })
-                  }
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(DEPT_LABELS).map(([k, label]) => (
-                      <SelectItem key={k} value={k}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <Button type="button" onClick={handleAddWorker} disabled={addingWorker}>
-              {addingWorker ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-              Ishchi qo&apos;shish
-            </Button>
-            {workers.length > 0 && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ism</TableHead>
-                    <TableHead>Bo&apos;lim</TableHead>
-                    <TableHead>Oylik</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {workers.filter((w) => w.is_active !== false).map((w) => (
-                    <TableRow key={String(w.id)}>
-                      <TableCell>{String(w.full_name)}</TableCell>
-                      <TableCell>{DEPT_LABELS[String(w.department)] || String(w.department)}</TableCell>
-                      <TableCell>{formatMoney(Number(w.monthly_salary))}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+          <CardContent>
+            <CostWorkersAdmin workers={workers} onReload={load} />
           </CardContent>
         </Card>
 

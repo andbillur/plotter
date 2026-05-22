@@ -10,7 +10,7 @@ import * as cw from '../costWorkers/costWorkers.service.js';
 export const cuttingRouter = Router();
 cuttingRouter.use(auth);
 
-cuttingRouter.get('/workers-pool', checkPermission('cutting:read'), asyncHandler(async (_req, res) => {
+cuttingRouter.get('/workers-pool', checkPermission('cost_config:manage'), asyncHandler(async (_req, res) => {
   res.json(await cw.listWorkers('kesish'));
 }));
 
@@ -58,7 +58,7 @@ cuttingRouter.get('/packaging-preview', checkPermission('cutting:read'), validat
   res.json(await svc.packagingPreview(req.validated.query.widthCm));
 }));
 
-cuttingRouter.put('/sessions/:id/workers', checkPermission('cutting:manage'), validate(z.object({
+cuttingRouter.put('/sessions/:id/workers', checkPermission('cost_config:manage'), validate(z.object({
   body: z.object({
     workers: z.array(z.object({
       workerId: z.string().uuid(),

@@ -14,6 +14,8 @@ import { Play, Plus, CheckCircle, Loader2, Info, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { SessionWorkersPanel } from '@/components/SessionWorkersPanel';
+import { useAuthStore } from '@/lib/store';
+import { isCostAdmin } from '@/lib/admin';
 import { calcPackagingCost } from '@/lib/cost-calc';
 import { useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -21,6 +23,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 const COLORS = ['white', 'cream', 'blue', 'grey', 'other'];
 
 export default function CuttingPage() {
+  const user = useAuthStore((s) => s.user);
+  const showWorkersPanel = isCostAdmin(user);
   const [sessions, setSessions] = useState<Record<string, unknown>[]>([]);
   const [availablePapers, setAvailablePapers] = useState<Record<string, unknown>[]>([]);
   const [activeSession, setActiveSession] = useState<Record<string, unknown> | null>(null);
@@ -278,18 +282,28 @@ export default function CuttingPage() {
               <CardTitle>Faol: {String(activeSession.session_code)} — Brak: {Number(activeSession.waste_percent || 0).toFixed(1)}%</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <SessionWorkersPanel
-                sessionId={String(activeSession.id)}
-                loadPool={() => apiClient.getCuttingWorkersPool() as Promise<{ id: string; full_name: string; monthly_salary: number }[]>}
-                loadAssigned={async () => {
-                  const d = await apiClient.getCuttingSession(String(activeSession.id));
-                  const w = (d.workers || []) as { id: string; full_name: string; kg_per_minute: number }[];
-                  return w;
-                }}
-                onSave={(workers) =>
-                  apiClient.setCuttingSessionWorkers(String(activeSession.id), workers).then(() => undefined)
-                }
-              />
+              {showWorkersPanel && (
+                <SessionWorkersPanel
+                  sessionId={String(activeSession.id)}
+                  loadPool={() =>
+                    apiClient.getCuttingWorkersPool() as Promise<
+                      { id: string; full_name: string; monthly_salary: number }[]
+                    >
+                  }
+                  loadAssigned={async () => {
+                    const d = await apiClient.getCuttingSession(String(activeSession.id));
+                    const w = (d.workers || []) as {
+                      id: string;
+                      full_name: string;
+                      kg_per_minute: number;
+                    }[];
+                    return w;
+                  }}
+                  onSave={(workers) =>
+                    apiClient.setCuttingSessionWorkers(String(activeSession.id), workers).then(() => undefined)
+                  }
+                />
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <Label>Eni (sm)</Label>

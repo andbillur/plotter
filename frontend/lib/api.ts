@@ -343,6 +343,28 @@ class ApiClient {
     return this.request<Record<string, unknown>>('/analytics/dashboard');
   }
 
+  async getBiDashboard(days = 90) {
+    return this.request<Record<string, unknown>>(`/analytics/bi?days=${days}`);
+  }
+
+  async getPowerBiConfig() {
+    return this.request<{
+      mode: string;
+      publicEmbedAllowed: boolean;
+      embedUrl: string;
+      title: string;
+      message?: string;
+    }>('/analytics/powerbi/config');
+  }
+
+  async clearPublicPowerBiEmbed() {
+    return this.request('/analytics/powerbi/public-embed', { method: 'DELETE' });
+  }
+
+  async getPowerBiConnection() {
+    return this.request<Record<string, unknown>>('/analytics/powerbi/connection');
+  }
+
   async getCostReports(params?: Record<string, string>) {
     const q = params ? `?${new URLSearchParams(params)}` : '';
     return this.request<Record<string, unknown>[]>(`/analytics/cost-report${q}`);
