@@ -53,6 +53,18 @@ export function calcOutputMetersFromKg(outputKg, widthMm, grammageG) {
   return Math.round(((kg * 1000) / (widthM * g)) * 100) / 100;
 }
 
+/** Metrdan kg: kg = uzunlik(m) × eni(m) × grammaj / 1000 */
+export function calcOutputKgFromMeters(outputMeters, widthMm, grammageG) {
+  const meters = Number(outputMeters);
+  const widthNorm = normalizeWidthMm(widthMm);
+  const widthM = widthNorm ? widthNorm / 1000 : 0;
+  const g = Number(grammageG);
+  if (!Number.isFinite(meters) || meters <= 0 || !Number.isFinite(widthM) || widthM <= 0 || !Number.isFinite(g) || g <= 0) {
+    return null;
+  }
+  return Math.round(((meters * widthM * g) / 1000) * 1000) / 1000;
+}
+
 /** Bobin eni (mm) — bazada ko‘pincha 182 (sm) yoziladi, formula uchun 1820 mm */
 export function normalizeWidthMm(widthMm) {
   const w = Number(widthMm);

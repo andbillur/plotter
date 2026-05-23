@@ -74,7 +74,7 @@ export default function ManufacturingPage() {
   const [bobinQr, setBobinQr] = useState('');
   const [selectedBobin, setSelectedBobin] = useState<Bobin | null>(null);
   const [machineId, setMachineId] = useState('');
-  const [finishForm, setFinishForm] = useState({ outputWeightKg: '', bobinRemainingWeightKg: '' });
+  const [finishForm, setFinishForm] = useState({ outputMeters: '', bobinRemainingMeters: '' });
   const [splitSessionId, setSplitSessionId] = useState('');
   const [splitWeights, setSplitWeights] = useState('200,200,200');
   const [lastSplitPapers, setLastSplitPapers] = useState<Record<string, unknown>[]>([]);
@@ -188,11 +188,11 @@ export default function ManufacturingPage() {
   };
 
   const handleFinish = async (sessionId: string) => {
-    const remaining = parseFloat(finishForm.bobinRemainingWeightKg);
+    const remaining = parseFloat(finishForm.bobinRemainingMeters);
     try {
       const res = await apiClient.finishProduction(sessionId, {
-        outputWeightKg: parseFloat(finishForm.outputWeightKg),
-        bobinRemainingWeightKg: remaining,
+        outputMeters: parseFloat(finishForm.outputMeters),
+        bobinRemainingMeters: remaining,
       });
       const cost = res.costReport;
       let clayMsg = '';
@@ -204,7 +204,7 @@ export default function ManufacturingPage() {
       }
       if (remaining > 0.01) {
         toast.success(
-          `FINISH — bobinda ${remaining} kg qoldi.${clayMsg} SPLIT qiling.`,
+          `FINISH — bobinda ${remaining.toLocaleString('uz-UZ')} m qoldi.${clayMsg} SPLIT qiling.`,
           { duration: 10000 }
         );
       } else {
@@ -212,7 +212,7 @@ export default function ManufacturingPage() {
           duration: 10000,
         });
       }
-      setFinishForm({ outputWeightKg: '', bobinRemainingWeightKg: '' });
+      setFinishForm({ outputMeters: '', bobinRemainingMeters: '' });
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Xatolik');
@@ -365,20 +365,30 @@ export default function ManufacturingPage() {
                         <DialogHeader><DialogTitle>FINISH — {String(s.session_code)}</DialogTitle></DialogHeader>
                         <div className="space-y-4">
                           <div>
-                            <Label>Tayyor mahsulot (kg)</Label>
-                            <Input value={finishForm.outputWeightKg} onChange={(e) => setFinishForm({ ...finishForm, outputWeightKg: e.target.value })} />
-                          </div>
-                          <div>
-                            <Label>Qolgan bobin (kg)</Label>
+                            <Label>Tayyor mahsulot (m)</Label>
                             <p className="text-xs text-slate-500 mb-1">
-                              0 kg yoki 0 m bo&apos;lsa bobin omborda qolmaydi (ishlatilgan). Qoldiq bo&apos;lsa qayta ishlatish mumkin.
+                              Metr kiriting — kg avtomatik hisoblanadi (eni + grammaj bo&apos;yicha)
                             </p>
                             <Input
                               type="number"
-                              step="0.001"
+                              step="0.01"
                               inputMode="decimal"
-                              value={finishForm.bobinRemainingWeightKg}
-                              onChange={(e) => setFinishForm({ ...finishForm, bobinRemainingWeightKg: e.target.value })}
+                              placeholder="Masalan 46406"
+                              value={finishForm.outputMeters}
+                              onChange={(e) => setFinishForm({ ...finishForm, outputMeters: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <Label>Qolgan bobin (m)</Label>
+                            <p className="text-xs text-slate-500 mb-1">
+                              0 m bo&apos;lsa bobin omborda qolmaydi. Qoldiq bo&apos;lsa qayta ishlatish mumkin.
+                            </p>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              inputMode="decimal"
+                              value={finishForm.bobinRemainingMeters}
+                              onChange={(e) => setFinishForm({ ...finishForm, bobinRemainingMeters: e.target.value })}
                             />
                           </div>
                           <Button className="w-full" onClick={() => handleFinish(String(s.id))}>Yakunlash</Button>

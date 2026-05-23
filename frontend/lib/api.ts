@@ -179,7 +179,7 @@ class ApiClient {
 
   async finishProduction(
     sessionId: string,
-    body: { outputWeightKg: number; bobinRemainingWeightKg: number }
+    body: { outputMeters: number; bobinRemainingMeters: number }
   ) {
     return this.request<{
       session: Record<string, unknown>;

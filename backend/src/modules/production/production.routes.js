@@ -39,8 +39,8 @@ productionRouter.post('/sessions/:id/clay/add', checkPermission('production:clay
 
 productionRouter.post('/sessions/:id/finish', checkPermission('production:finish'), validate(z.object({
   body: z.object({
-    outputWeightKg: z.number().positive(),
-    bobinRemainingWeightKg: z.number().nonnegative(),
+    outputMeters: z.number().positive(),
+    bobinRemainingMeters: z.number().nonnegative(),
   }),
 })), asyncHandler(async (req, res) => {
   res.json(await svc.finish(req.params.id, req.validated.body, req.user.id));
@@ -50,8 +50,9 @@ productionRouter.patch('/sessions/:id/cancel', checkPermission('production:cance
   res.json(await svc.cancel(req.params.id));
 }));
 
-productionRouter.post('/admin/recalc-cost-reports', checkPermission('cost_config:manage'), asyncHandler(async (_req, res) => {
-  res.json(await svc.recalcInflatedCostReports());
+productionRouter.post('/admin/recalc-cost-reports', checkPermission('cost_config:manage'), asyncHandler(async (req, res) => {
+  const forceAll = req.query.forceAll === 'true' || req.body?.forceAll === true;
+  res.json(await svc.recalcInflatedCostReports({ forceAll }));
 }));
 
 productionRouter.get('/sessions/:id/cost', checkPermission('production:read'), asyncHandler(async (req, res) => {

@@ -1,9 +1,9 @@
 import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
-import { calcProductionLaborCost, calcOutputMetersFromKg } from '../../utils/costCalc.js';
+import { calcProductionLaborCost, calcOutputMetersFromKg, calcOutputKgFromMeters } from '../../utils/costCalc.js';
 import {
-  isInflatedProductionLaborReport,
+  shouldRecalcProductionCostReport,
   repairProductionCostReport,
 } from '../../utils/productionCostRepair.js';
 import {
@@ -109,7 +109,7 @@ export async function addClay(sessionId, { quantityKg, bags }, userId) {
   }
 }
 
-export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg }, userId) {
+export async function finish(sessionId, { outputMeters, bobinRemainingMeters }, userId) {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
@@ -120,23 +120,28 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
     if (!sess.rows.length) throw new AppError('Sessiya topilmadi', 404);
     const s = sess.rows[0];
 
-    const remainingKg = Number(bobinRemainingWeightKg);
-
     const bobinMeta = await client.query(
       `SELECT width_mm, grammaj, current_length_m FROM bobins WHERE id = $1`,
       [s.bobin_id]
     );
     const bMeta = bobinMeta.rows[0] || {};
-    let remainingM = calcOutputMetersFromKg(remainingKg, bMeta.width_mm, bMeta.grammaj);
-    if (remainingM == null) {
-      const startKg = Number(s.bobin_weight_at_start_kg);
-      if (startKg > 0 && remainingKg > 0) {
-        remainingM =
-          Math.round(((remainingKg / startKg) * Number(bMeta.current_length_m || 0)) * 100) / 100;
-      } else {
-        remainingM = 0;
-      }
+
+    const outMeters = Number(outputMeters);
+    const remainingM = Number(bobinRemainingMeters);
+    if (!Number.isFinite(outMeters) || outMeters <= 0) {
+      throw new AppError('Tayyor mahsulot uzunligini metrda kiriting', 400);
     }
+    if (!Number.isFinite(remainingM) || remainingM < 0) {
+      throw new AppError('Qolgan bobin uzunligini metrda kiriting', 400);
+    }
+
+    const outputWeightKg = calcOutputKgFromMeters(outMeters, bMeta.width_mm, bMeta.grammaj);
+    if (outputWeightKg == null || outputWeightKg <= 0) {
+      throw new AppError('Kg hisoblanmadi: bobinda eni (mm) va grammaj to\'g\'ri kiriting', 400);
+    }
+
+    let remainingKg = calcOutputKgFromMeters(remainingM, bMeta.width_mm, bMeta.grammaj);
+    if (remainingKg == null) remainingKg = 0;
 
     await client.query(
       `UPDATE production_sessions SET
@@ -164,7 +169,7 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
     const cfg = await client.query(`SELECT id FROM cost_config ORDER BY valid_from DESC LIMIT 1`);
     const c = cost.rows[0];
 
-    const outputMeters = calcOutputMetersFromKg(outputWeightKg, bMeta.width_mm, bMeta.grammaj);
+    const outputMetersStored = outMeters;
     const outKg = Number(c.output_kg) || Number(outputWeightKg);
 
     const laborWorkers = await calcProductionLaborCost(
@@ -204,7 +209,7 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [
         sessionId, cfg.rows[0].id,
-        c.paper_used_kg, c.clay_used_kg, c.output_kg, outputMeters,
+        c.paper_used_kg, c.clay_used_kg, c.output_kg, outputMetersStored,
         c.clay_ratio,
         c.paper_cost, c.clay_cost, c.electricity_cost, laborFinal, laborWorkers.total,
         laborWorkers.laborPerKg || 0,
@@ -279,29 +284,31 @@ export async function getById(id) {
       [id]
     );
     costReport = cost.rows[0] || null;
-    if (costReport && isInflatedProductionLaborReport(costReport)) {
+    if (costReport) {
       const repaired = await repairProductionCostReport(
         costReport,
         id,
         rows[0].bobin_width_mm,
         rows[0].bobin_grammaj
       );
-      await db.query(
-        `UPDATE production_cost_reports SET
-          labor_cost_total = $1, labor_workers_cost = $2, labor_cost_per_kg = $3,
-          labor_cost_per_meter = $4, grand_total_cost = $5, cost_per_kg_output = $6
-         WHERE id = $7`,
-        [
-          repaired.labor_cost_total,
-          repaired.labor_workers_cost,
-          repaired.labor_cost_per_kg,
-          repaired.labor_cost_per_meter,
-          repaired.grand_total_cost,
-          repaired.cost_per_kg_output,
-          costReport.id,
-        ]
-      );
-      costReport = repaired;
+      if (shouldRecalcProductionCostReport(costReport, repaired)) {
+        await db.query(
+          `UPDATE production_cost_reports SET
+            labor_cost_total = $1, labor_workers_cost = $2, labor_cost_per_kg = $3,
+            labor_cost_per_meter = $4, grand_total_cost = $5, cost_per_kg_output = $6
+           WHERE id = $7`,
+          [
+            repaired.labor_cost_total,
+            repaired.labor_workers_cost,
+            repaired.labor_cost_per_kg,
+            repaired.labor_cost_per_meter,
+            repaired.grand_total_cost,
+            repaired.cost_per_kg_output,
+            costReport.id,
+          ]
+        );
+        costReport = repaired;
+      }
     }
   }
   const workers = await costWorkers.getProductionWorkers(id);
@@ -327,26 +334,42 @@ export async function getCost(id) {
     return calc.rows[0] || null;
   }
   let report = rows[0];
-  if (isInflatedProductionLaborReport(report)) {
-    const sess = await db.query(
-      `SELECT ps.id, b.width_mm, b.grammaj
-       FROM production_sessions ps
-       JOIN bobins b ON b.id = ps.bobin_id
-       WHERE ps.id = $1`,
-      [id]
-    );
-    if (sess.rows.length) {
-      const s = sess.rows[0];
-      report = await repairProductionCostReport(report, id, s.width_mm, s.grammaj);
+  const sess = await db.query(
+    `SELECT ps.id, b.width_mm, b.grammaj
+     FROM production_sessions ps
+     JOIN bobins b ON b.id = ps.bobin_id
+     WHERE ps.id = $1`,
+    [id]
+  );
+  if (sess.rows.length) {
+    const s = sess.rows[0];
+    const repaired = await repairProductionCostReport(report, id, s.width_mm, s.grammaj);
+    if (shouldRecalcProductionCostReport(report, repaired)) {
+      await db.query(
+        `UPDATE production_cost_reports SET
+          labor_cost_total = $1, labor_workers_cost = $2, labor_cost_per_kg = $3,
+          labor_cost_per_meter = $4, grand_total_cost = $5, cost_per_kg_output = $6
+         WHERE id = $7`,
+        [
+          repaired.labor_cost_total,
+          repaired.labor_workers_cost,
+          repaired.labor_cost_per_kg,
+          repaired.labor_cost_per_meter,
+          repaired.grand_total_cost,
+          repaired.cost_per_kg_output,
+          report.id,
+        ]
+      );
+      report = repaired;
     }
   }
   return report;
 }
 
-/** Eski xato ish haqi yozuvlarini bazada tuzatish (admin) */
-export async function recalcInflatedCostReports() {
+/** Barcha (yoki farqi bor) tannarx hisobotlarini qayta hisoblash */
+export async function recalcInflatedCostReports({ forceAll = false } = {}) {
   const { rows } = await db.query(
-    `SELECT pcr.*, ps.id AS session_id, b.width_mm, b.grammaj
+    `SELECT pcr.*, ps.id AS session_id, ps.session_code, b.width_mm, b.grammaj
      FROM production_cost_reports pcr
      JOIN production_sessions ps ON ps.id = pcr.session_id
      JOIN bobins b ON b.id = ps.bobin_id
@@ -354,8 +377,15 @@ export async function recalcInflatedCostReports() {
   );
 
   let fixed = 0;
+  let skipped = 0;
+
   for (const row of rows) {
-    if (!isInflatedProductionLaborReport(row)) continue;
+    const { rows: wc } = await db.query(
+      `SELECT COUNT(*)::int AS n FROM production_session_workers
+       WHERE session_id = $1 AND meters_per_minute IS NOT NULL AND meters_per_minute > 0`,
+      [row.session_id]
+    );
+    const hasWorkers = Number(wc[0]?.n) > 0;
 
     const repaired = await repairProductionCostReport(
       row,
@@ -363,6 +393,14 @@ export async function recalcInflatedCostReports() {
       row.width_mm,
       row.grammaj
     );
+
+    const mustUpdate =
+      forceAll && hasWorkers ? true : shouldRecalcProductionCostReport(row, repaired);
+
+    if (!mustUpdate) {
+      skipped++;
+      continue;
+    }
 
     await db.query(
       `UPDATE production_cost_reports SET
@@ -385,7 +423,7 @@ export async function recalcInflatedCostReports() {
     );
     fixed++;
   }
-  return { fixed, total: rows.length };
+  return { fixed, skipped, total: rows.length, forceAll };
 }
 
 const SESSION_LIST_SELECT = `

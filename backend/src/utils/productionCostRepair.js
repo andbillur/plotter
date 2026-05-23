@@ -1,25 +1,58 @@
 import { calcProductionLaborCost, getCurrentCostConfig } from './costCalc.js';
 
-/** Eski xato hisob (oylik × metr va h.k.) — bundan yuqori bo‘lsa qayta hisoblanadi */
-const MAX_LABOR_PER_KG = 50_000;
-const MAX_LABOR_SESSION = 5_000_000;
+/** Aniq xato — juda katta */
+const MAX_LABOR_PER_KG = 10_000;
+const MAX_LABOR_SESSION = 500_000;
+const MAX_LABOR_PER_METER = 500;
 
+/** Eski xato formuladan qolgan yozuvlar */
 export function isInflatedProductionLaborReport(report) {
   if (!report) return false;
-  const labor = Number(report.labor_workers_cost);
+  const labor = Number(report.labor_workers_cost) || Number(report.labor_cost_total);
   const perKg = Number(report.labor_cost_per_kg);
   const perM = Number(report.labor_cost_per_meter);
   const outKg = Number(report.output_weight_kg);
-  if (!labor || labor <= 0) return false;
+  const outM = Number(report.output_meters);
+  if (!labor || labor <= 0) {
+    if (perKg > MAX_LABOR_PER_KG) return true;
+    if (perM > MAX_LABOR_PER_METER) return true;
+    return false;
+  }
   if (labor > MAX_LABOR_SESSION) return true;
   if (perKg > MAX_LABOR_PER_KG) return true;
-  if (perM > 5000) return true;
+  if (perM > MAX_LABOR_PER_METER) return true;
   if (outKg > 0 && labor / outKg > MAX_LABOR_PER_KG) return true;
+  if (outM > 0 && perM > 0 && perM * outM > labor * 2 && perM * outM > MAX_LABOR_SESSION) return true;
   return false;
 }
 
 /**
- * Tannarx hisobotini to‘g‘ri ish haqi bilan qayta yig‘ish (faqat ko‘rsatish yoki DB yangilash).
+ * Saqlangan va qayta hisoblangan farq qattiq bo‘lsa — yangilash kerak.
+ */
+export function shouldRecalcProductionCostReport(report, repaired) {
+  if (!report || !repaired) return false;
+  if (isInflatedProductionLaborReport(report)) return true;
+
+  const fields = [
+    ['labor_workers_cost', 'labor_workers_cost'],
+    ['labor_cost_total', 'labor_cost_total'],
+    ['labor_cost_per_kg', 'labor_cost_per_kg'],
+    ['labor_cost_per_meter', 'labor_cost_per_meter'],
+    ['grand_total_cost', 'grand_total_cost'],
+    ['cost_per_kg_output', 'cost_per_kg_output'],
+  ];
+
+  for (const [oldKey, newKey] of fields) {
+    const oldV = Number(report[oldKey]);
+    const newV = Number(repaired[newKey]);
+    if (!Number.isFinite(oldV) && !Number.isFinite(newV)) continue;
+    if (Math.abs((oldV || 0) - (newV || 0)) > 50) return true;
+  }
+  return false;
+}
+
+/**
+ * Tannarx hisobotini to‘g‘ri ish haqi bilan qayta yig‘ish.
  */
 export async function repairProductionCostReport(report, sessionId, widthMm, grammageG) {
   const outKg = Number(report.output_weight_kg) || 0;
@@ -44,6 +77,7 @@ export async function repairProductionCostReport(report, sessionId, widthMm, gra
     laborWorkersCost = 0;
     laborPerMeter = 0;
   }
+
   const grandTotal = paper + clay + elec + laborFinal + other;
   const costPerKg = outKg > 0 ? Math.round((grandTotal / outKg) * 100) / 100 : 0;
 
