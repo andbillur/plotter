@@ -70,15 +70,25 @@ export function bobinSummaryText(b: Parameters<typeof bobinSummaryLines>[0]): st
 
 /** FINISH dan keyin qoldiq bo'lsa yana ishlab chiqarish mumkin */
 export const MIN_BOBIN_REMAINING_KG = 0.01;
+export const MIN_BOBIN_REMAINING_M = 0.01;
+
+export function bobinHasWarehouseStock(b: {
+  current_weight_kg?: number | string;
+  current_length_m?: number | string;
+}): boolean {
+  const kg = Number(b.current_weight_kg ?? 0);
+  const m = Number(b.current_length_m ?? 0);
+  return kg > MIN_BOBIN_REMAINING_KG && m > MIN_BOBIN_REMAINING_M;
+}
 
 export function bobinCanStartProduction(b: {
   status: string;
   current_weight_kg?: number | string;
+  current_length_m?: number | string;
 }): boolean {
+  if (!bobinHasWarehouseStock(b)) return false;
   if (b.status === 'omborxonada') return true;
-  if (b.status === 'ishlatilgan' && Number(b.current_weight_kg) > MIN_BOBIN_REMAINING_KG) {
-    return true;
-  }
+  if (b.status === 'ishlatilgan') return true;
   return false;
 }
 

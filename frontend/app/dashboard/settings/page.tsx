@@ -30,7 +30,7 @@ const DEFAULTS = {
   laborCostPerKg: '200',
   otherCostPerKg: '0',
   packagingPricePerMeter: '6000',
-  workMinutesPerMonth: '12480',
+  workMinutesPerMonth: '43200',
 };
 
 type CostForm = {
@@ -115,7 +115,7 @@ export default function SettingsPage() {
     const laborCostPerKg = parseFloat(form.laborCostPerKg) || 0;
     const otherCostPerKg = parseFloat(form.otherCostPerKg) || 0;
     const packagingPricePerMeter = parseFloat(form.packagingPricePerMeter) || 6000;
-    const workMinutesPerMonth = parseInt(form.workMinutesPerMonth, 10) || 12480;
+    const workMinutesPerMonth = parseInt(form.workMinutesPerMonth, 10) || 43200;
 
     if (!paperPricePerKg || !clayPricePerKg) {
       toast.error('Qog\'oz va kley narxi majburiy');
@@ -279,7 +279,7 @@ export default function SettingsPage() {
                     </p>
                   </div>
                   <div>
-                    <Label>Oyda ish minutlari (ish haqi hisobi)</Label>
+                    <Label>Oyda daqiqalar (oylik ÷ minut)</Label>
                     <Input
                       type="number"
                       min="1"
@@ -288,7 +288,9 @@ export default function SettingsPage() {
                       value={form.workMinutesPerMonth}
                       onChange={(e) => setForm({ ...form, workMinutesPerMonth: e.target.value })}
                     />
-                    <p className="text-xs text-slate-500 mt-1">Standart: 8 soat × 26 kun ≈ 12480</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Ish haqi: oylik ÷ (30×24×60) = 43200. Masalan 18 mln ÷ 43200 ≈ 416 so&apos;m/min
+                    </p>
                   </div>
                   <div className="sm:col-span-2">
                     <Label>Boshqa xarajatlar (1 kg)</Label>

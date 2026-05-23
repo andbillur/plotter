@@ -208,7 +208,9 @@ export default function ManufacturingPage() {
           { duration: 10000 }
         );
       } else {
-        toast.success(`FINISH tugadi.${clayMsg} SPLIT qiling.`, { duration: 10000 });
+        toast.success(`FINISH tugadi — bobin to'liq ishlatildi (omborda emas).${clayMsg} SPLIT qiling.`, {
+          duration: 10000,
+        });
       }
       setFinishForm({ outputWeightKg: '', bobinRemainingWeightKg: '' });
       load();
@@ -370,7 +372,7 @@ export default function ManufacturingPage() {
                           <div>
                             <Label>Qolgan bobin (kg)</Label>
                             <p className="text-xs text-slate-500 mb-1">
-                              0 dan katta bo&apos;lsa bobin yana <strong>omborda</strong> — keyin qayta ishlatish mumkin
+                              0 kg yoki 0 m bo&apos;lsa bobin omborda qolmaydi (ishlatilgan). Qoldiq bo&apos;lsa qayta ishlatish mumkin.
                             </p>
                             <Input
                               type="number"
@@ -579,11 +581,11 @@ export default function ManufacturingPage() {
                     <p>
                       Ish haqi (ishchilar):{' '}
                       {Number((detailSession.costReport as Record<string, unknown>).labor_workers_cost || 0).toLocaleString('uz-UZ')} so&apos;m
-                      {Number((detailSession.costReport as Record<string, unknown>).labor_cost_per_meter || 0) > 0 && (
+                      {Number((detailSession.costReport as Record<string, unknown>).labor_cost_per_kg || 0) > 0 && (
                         <>
                           {' '}
-                          (1 m:{' '}
-                          {Number((detailSession.costReport as Record<string, unknown>).labor_cost_per_meter).toLocaleString('uz-UZ')}{' '}
+                          (1 kg:{' '}
+                          {Number((detailSession.costReport as Record<string, unknown>).labor_cost_per_kg).toLocaleString('uz-UZ')}{' '}
                           so&apos;m)
                         </>
                       )}

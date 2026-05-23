@@ -2,6 +2,7 @@ import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
 import { generateQrCode } from '../../utils/qr.js';
+import { MIN_BOBIN_REMAINING_KG, MIN_BOBIN_REMAINING_M } from '../../utils/bobinStock.js';
 
 const SORT_COLS = ['created_at', 'grammaj', 'current_weight_kg', 'status'];
 
@@ -11,6 +12,12 @@ export async function list(query) {
   const params = [];
   let i = 1;
   if (query.status) { conditions.push(`status = $${i++}`); params.push(query.status); }
+  if (query.status === 'omborxonada') {
+    conditions.push(`current_weight_kg > $${i++}`);
+    params.push(MIN_BOBIN_REMAINING_KG);
+    conditions.push(`current_length_m > $${i++}`);
+    params.push(MIN_BOBIN_REMAINING_M);
+  }
   if (query.grammaj) { conditions.push(`grammaj = $${i++}`); params.push(query.grammaj); }
   if (query.color) { conditions.push(`color = $${i++}`); params.push(query.color); }
   const sort = SORT_COLS.includes(query.sort) ? query.sort : 'created_at';
@@ -84,8 +91,12 @@ export async function update(id, data) {
   }
   if (!fields.length) throw new AppError('Yangilash uchun ma\'lumot yo\'q', 400);
 
-  if (data.status === 'omborxonada' && Number(data.currentWeightKg ?? bobin.current_weight_kg) <= 0.01) {
-    throw new AppError('Omborga qaytarish uchun og\'irlik 0 dan katta bo\'lishi kerak', 400);
+  if (data.status === 'omborxonada') {
+    const kg = Number(data.currentWeightKg ?? bobin.current_weight_kg);
+    const m = Number(data.currentLengthM ?? bobin.current_length_m);
+    if (kg <= MIN_BOBIN_REMAINING_KG || m <= MIN_BOBIN_REMAINING_M) {
+      throw new AppError('Omborga qaytarish uchun og\'irlik va uzunlik 0 dan katta bo\'lishi kerak', 400);
+    }
   }
 
   fields.push('updated_at = NOW()');

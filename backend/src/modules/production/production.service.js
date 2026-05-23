@@ -2,23 +2,11 @@ import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
 import { calcProductionLaborCost, calcOutputMetersFromKg } from '../../utils/costCalc.js';
+import {
+  bobinCanStartProduction,
+  bobinStatusAfterFinish,
+} from '../../utils/bobinStock.js';
 import * as costWorkers from '../costWorkers/costWorkers.service.js';
-
-/** Qoldiq bor-yo'qligini tekshirish (kg) */
-const MIN_BOBIN_REMAINING_KG = 0.01;
-
-function bobinCanStartProduction(bobin) {
-  if (bobin.status === 'omborxonada') return true;
-  // Eski yozuvlar: ishlatilgan, lekin qoldiq bor
-  if (bobin.status === 'ishlatilgan' && Number(bobin.current_weight_kg) > MIN_BOBIN_REMAINING_KG) {
-    return true;
-  }
-  return false;
-}
-
-function bobinStatusAfterFinish(remainingKg) {
-  return Number(remainingKg) > MIN_BOBIN_REMAINING_KG ? 'omborxonada' : 'ishlatilgan';
-}
 
 export async function start({ bobinQrCode, machineId }, operatorId) {
   const client = await db.getClient();
@@ -128,6 +116,24 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
     if (!sess.rows.length) throw new AppError('Sessiya topilmadi', 404);
     const s = sess.rows[0];
 
+    const remainingKg = Number(bobinRemainingWeightKg);
+
+    const bobinMeta = await client.query(
+      `SELECT width_mm, grammaj, current_length_m FROM bobins WHERE id = $1`,
+      [s.bobin_id]
+    );
+    const bMeta = bobinMeta.rows[0] || {};
+    let remainingM = calcOutputMetersFromKg(remainingKg, bMeta.width_mm, bMeta.grammaj);
+    if (remainingM == null) {
+      const startKg = Number(s.bobin_weight_at_start_kg);
+      if (startKg > 0 && remainingKg > 0) {
+        remainingM =
+          Math.round(((remainingKg / startKg) * Number(bMeta.current_length_m || 0)) * 100) / 100;
+      } else {
+        remainingM = 0;
+      }
+    }
+
     await client.query(
       `UPDATE production_sessions SET
         bobin_weight_at_finish_kg = $1,
@@ -135,32 +141,34 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
         status = 'tugallangan',
         finished_at = NOW()
        WHERE id = $3`,
-      [bobinRemainingWeightKg, outputWeightKg, sessionId]
+      [remainingKg, outputWeightKg, sessionId]
     );
 
-    const nextStatus = bobinStatusAfterFinish(bobinRemainingWeightKg);
+    const nextStatus = bobinStatusAfterFinish(remainingKg, remainingM);
     await client.query(
       `UPDATE bobins SET
         current_weight_kg = $1,
-        status = $2,
+        current_length_m = $2,
+        status = $3,
         current_machine_id = NULL,
         updated_at = NOW()
-       WHERE id = $3`,
-      [bobinRemainingWeightKg, nextStatus, s.bobin_id]
+       WHERE id = $4`,
+      [remainingKg, remainingM, nextStatus, s.bobin_id]
     );
 
     const cost = await client.query(`SELECT * FROM calculate_production_cost($1)`, [sessionId]);
     const cfg = await client.query(`SELECT id FROM cost_config ORDER BY valid_from DESC LIMIT 1`);
     const c = cost.rows[0];
 
-    const bobin = await client.query(
-      `SELECT width_mm, grammaj FROM bobins WHERE id = $1`,
-      [s.bobin_id]
-    );
-    const b = bobin.rows[0] || {};
-    const outputMeters = calcOutputMetersFromKg(outputWeightKg, b.width_mm, b.grammaj);
+    const outputMeters = calcOutputMetersFromKg(outputWeightKg, bMeta.width_mm, bMeta.grammaj);
+    const outKg = Number(c.output_kg) || Number(outputWeightKg);
 
-    const laborWorkers = await calcProductionLaborCost(sessionId, outputMeters ?? 0);
+    const laborWorkers = await calcProductionLaborCost(
+      sessionId,
+      outKg,
+      bMeta.width_mm,
+      bMeta.grammaj
+    );
     const laborFinal =
       laborWorkers.total > 0 ? laborWorkers.total : Number(c.labor_cost);
     const grandTotal =
@@ -169,21 +177,21 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
       Number(c.electricity_cost) +
       laborFinal +
       Number(c.other_cost);
-    const outKg = Number(c.output_kg) || Number(outputWeightKg);
     const costPerKg = outKg > 0 ? grandTotal / outKg : 0;
 
     await client.query(
       `INSERT INTO production_cost_reports (
         session_id, cost_config_id, paper_used_kg, clay_used_kg, output_weight_kg,
         output_meters, clay_per_kg_paper, paper_cost_total, clay_cost_total, electricity_cost_total,
-        labor_cost_total, labor_workers_cost, labor_cost_per_meter, other_cost_total, grand_total_cost, cost_per_kg_output,
+        labor_cost_total, labor_workers_cost, labor_cost_per_kg, labor_cost_per_meter, other_cost_total, grand_total_cost, cost_per_kg_output,
         waste_kg, waste_percent
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [
         sessionId, cfg.rows[0].id,
         c.paper_used_kg, c.clay_used_kg, c.output_kg, outputMeters,
         c.clay_ratio,
         c.paper_cost, c.clay_cost, c.electricity_cost, laborFinal, laborWorkers.total,
+        laborWorkers.laborPerKg || 0,
         laborWorkers.laborPerMeter || 0,
         c.other_cost, grandTotal, costPerKg, c.waste_kg, c.waste_percent,
       ]

@@ -127,8 +127,8 @@ export function SessionWorkersPanel({
       </p>
       {isMeters && (
         <p className="text-xs text-slate-600">
-          Vaqt = chiqish (m) ÷ Σ(m/min). Ish haqi = (oylik ÷ oy daqiqalari) × vaqt. 1 m uchun alohida
-          hisoblanadi.
+          Oyliklar yig&apos;indisi ÷ (30×24×60) = daqiqalik stavka. Σ(m/min) + bobin eni/grammaji → 1 kg
+          vaqti → 1 kg ish haqi tannarxga qo&apos;shiladi.
         </p>
       )}
       {rows.map((row, i) => (

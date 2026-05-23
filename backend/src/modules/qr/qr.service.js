@@ -1,5 +1,6 @@
 import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
+import { bobinCanStartProduction } from '../../utils/bobinStock.js';
 
 const ROLE_ACTIONS = {
   super_admin: ['start_production', 'start_cutting', 'add_to_plot', 'receive_bobin', 'receive_clay', 'add_to_shipment', 'register_warehouse'],
@@ -18,10 +19,7 @@ export async function scan(qrCode, roleName) {
   if (bobin.rows.length) {
     type = 'bobin';
     data = bobin.rows[0];
-    if (
-      data.status === 'omborxonada' ||
-      (data.status === 'ishlatilgan' && Number(data.current_weight_kg) > 0.01)
-    ) {
+    if (bobinCanStartProduction(data)) {
       allowedActions.push('start_production');
     }
     return buildResponse(type, data, roleName, allowedActions);
