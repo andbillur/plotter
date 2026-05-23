@@ -50,6 +50,10 @@ productionRouter.patch('/sessions/:id/cancel', checkPermission('production:cance
   res.json(await svc.cancel(req.params.id));
 }));
 
+productionRouter.post('/admin/recalc-cost-reports', checkPermission('cost_config:manage'), asyncHandler(async (_req, res) => {
+  res.json(await svc.recalcInflatedCostReports());
+}));
+
 productionRouter.get('/sessions/:id/cost', checkPermission('production:read'), asyncHandler(async (req, res) => {
   res.json(await svc.getCost(req.params.id));
 }));
