@@ -540,6 +540,16 @@ class ApiClient {
     return this.request<PaginatedResponse<Record<string, unknown>>>(`/scrap/transactions${q}`);
   }
 
+  async getScrapLotByQr(qrCode: string) {
+    return this.request<{
+      id: string;
+      qr_code: string;
+      warehouse_type: 'brak' | 'makulatura';
+      weight_kg: number;
+      status: string;
+    }>(`/scrap/lots/${encodeURIComponent(qrCode.trim())}`);
+  }
+
   async addScrapMovement(body: {
     warehouseType: 'brak' | 'makulatura';
     movementType: string;
@@ -547,6 +557,8 @@ class ApiClient {
     pricePerKg?: number;
     counterparty?: string;
     notes?: string;
+    qrCode?: string;
+    createLabel?: boolean;
   }) {
     return this.request<Record<string, unknown>>('/scrap/movements', {
       method: 'POST',

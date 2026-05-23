@@ -153,6 +153,23 @@ export default function QRScannerPage() {
                   )}
                 </>
               )}
+              {(result.type === 'scrap_brak' || result.type === 'scrap_makulatura') && (
+                <>
+                  <p>
+                    <strong>Etiket:</strong> {String(result.data.qr_code)}
+                  </p>
+                  <p>
+                    <strong>Ombor:</strong>{' '}
+                    {result.type === 'scrap_brak' ? 'Brak (qayta ishlatish)' : 'Makulatura (sota)'}
+                  </p>
+                  <p>
+                    <strong>Og&apos;irlik:</strong> {Number(result.data.weight_kg)} kg
+                  </p>
+                  <p>
+                    <strong>Holat:</strong> {String(result.data.status)}
+                  </p>
+                </>
+              )}
               {result.type === 'cut_product' && (
                 <>
                   <p>

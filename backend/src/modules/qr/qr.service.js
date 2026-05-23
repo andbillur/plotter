@@ -45,6 +45,17 @@ export async function scan(qrCode, roleName) {
     return buildResponse(type, data, roleName, allowedActions);
   }
 
+  const scrapLot = await db.query(`SELECT * FROM scrap_lots WHERE qr_code = $1`, [qrCode]);
+  if (scrapLot.rows.length) {
+    const lot = scrapLot.rows[0];
+    type = lot.warehouse_type === 'brak' ? 'scrap_brak' : 'scrap_makulatura';
+    data = lot;
+    if (lot.status === 'omborxona') {
+      allowedActions.push('scrap_out');
+    }
+    return buildResponse(type, data, roleName, allowedActions);
+  }
+
   const ps = await db.query(
     `SELECT * FROM production_sessions WHERE session_code = $1`,
     [qrCode]

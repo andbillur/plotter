@@ -31,7 +31,13 @@ const movementBody = z.object({
   totalAmount: z.number().optional(),
   counterparty: z.string().optional(),
   notes: z.string().optional(),
+  qrCode: z.string().optional(),
+  createLabel: z.boolean().optional(),
 });
+
+scrapRouter.get('/lots/:qrCode', checkPermission('scrap:read'), asyncHandler(async (req, res) => {
+  res.json(await svc.getLotByQr(req.params.qrCode));
+}));
 
 scrapRouter.post('/movements', checkPermission('scrap:manage'), validate(z.object({ body: movementBody })), asyncHandler(async (req, res) => {
   res.status(201).json(await svc.addMovement(req.validated.body, req.user.id));

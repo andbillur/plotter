@@ -22,6 +22,8 @@ import {
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { BarcodeScanner } from '@/components/BarcodeScanner';
+import { PrintQrButton } from '@/components/PrintQrButton';
 import { Loader2, Plus, Recycle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -71,7 +73,18 @@ export default function ScrapWarehousePage() {
     pricePerKg: '',
     counterparty: '',
     notes: '',
+    qrCode: '',
+    createLabel: true,
   });
+  const [lastLabel, setLastLabel] = useState<{ qr: string; kg: number; title: string } | null>(
+    null
+  );
+
+  const isOutbound =
+    form.movementType === 'chiqim' ||
+    form.movementType === 'chiqim_sotish' ||
+    form.movementType === 'chiqim_ishlatish';
+  const qrPrefix = tab === 'brak' ? 'BRK' : 'MAK';
 
   const load = useCallback(() => {
     setLoading(true);
@@ -99,6 +112,35 @@ export default function ScrapWarehousePage() {
 
   const movements = tab === 'brak' ? MOVEMENTS_BRAK : MOVEMENTS_MAK;
 
+  const handleScanLot = async (code: string) => {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setForm((f) => ({ ...f, qrCode: trimmed }));
+    if (!isOutbound) {
+      toast.success('Kod qabul qilindi');
+      return;
+    }
+    try {
+      const lot = await apiClient.getScrapLotByQr(trimmed);
+      if (lot.warehouse_type !== tab) {
+        toast.error(
+          lot.warehouse_type === 'brak'
+            ? 'Bu BRK etiketi — Brak omboriga o\'ting'
+            : 'Bu MAK etiketi — Makulatura omboriga o\'ting'
+        );
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        qrCode: lot.qr_code,
+        quantityKg: String(lot.weight_kg),
+      }));
+      toast.success(`${lot.qr_code} — ${lot.weight_kg} kg`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Etiket topilmadi');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = parseFloat(form.quantityKg);
@@ -107,22 +149,39 @@ export default function ScrapWarehousePage() {
       return;
     }
     try {
-      await apiClient.addScrapMovement({
+      const res = await apiClient.addScrapMovement({
         warehouseType: tab,
         movementType: form.movementType,
         quantityKg: qty,
         pricePerKg: form.pricePerKg ? parseFloat(form.pricePerKg) : undefined,
         counterparty: form.counterparty || undefined,
         notes: form.notes || undefined,
+        qrCode: form.qrCode.trim() || undefined,
+        createLabel:
+          !isOutbound &&
+          (form.movementType === 'kirim' || form.movementType === 'kirim_savdo') &&
+          form.createLabel,
       });
-      toast.success('Saqlandi');
+      const createdQr = res.qr_code ? String(res.qr_code) : '';
+      if (createdQr) {
+        setLastLabel({
+          qr: createdQr,
+          kg: qty,
+          title: tab === 'brak' ? 'Brak etiketi' : 'Makulatura etiketi',
+        });
+        toast.success(`Saqlandi — etiket: ${createdQr}`);
+      } else {
+        toast.success('Saqlandi');
+      }
       setOpen(false);
       setForm({
-        movementType: tab === 'brak' ? 'kirim' : 'kirim',
+        movementType: 'kirim',
         quantityKg: '',
         pricePerKg: '',
         counterparty: '',
         notes: '',
+        qrCode: '',
+        createLabel: true,
       });
       load();
     } catch (err) {
@@ -155,11 +214,47 @@ export default function ScrapWarehousePage() {
                   </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-3">
+                  <BarcodeScanner
+                    label={
+                      isOutbound
+                        ? `Etiket barcode (${qrPrefix}-...)`
+                        : `Barcode (ixtiyoriy, ${qrPrefix}-...)`
+                    }
+                    placeholder={
+                      isOutbound
+                        ? 'Chiqim uchun etiketni skanerlang...'
+                        : 'Skaner yoki qo\'lda kod...'
+                    }
+                    codePrefix={qrPrefix}
+                    value={form.qrCode}
+                    onValueChange={(qrCode) => setForm({ ...form, qrCode })}
+                    onScan={handleScanLot}
+                  />
+                  {form.qrCode && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-mono bg-slate-50 rounded border px-2 py-2 break-all">
+                      <span className="flex-1 min-w-0">{form.qrCode}</span>
+                      <PrintQrButton
+                        code={form.qrCode}
+                        title={tab === 'brak' ? 'Brak' : 'Makulatura'}
+                        lines={
+                          form.quantityKg ? [`${form.quantityKg} kg`] : undefined
+                        }
+                        size="sm"
+                      />
+                    </div>
+                  )}
                   <div>
                     <Label>Harakat turi</Label>
                     <Select
                       value={form.movementType}
-                      onValueChange={(v) => setForm({ ...form, movementType: v })}
+                      onValueChange={(v) =>
+                        setForm({
+                          ...form,
+                          movementType: v,
+                          qrCode: '',
+                          quantityKg: '',
+                        })
+                      }
                     >
                       <SelectTrigger className="mt-1">
                         <SelectValue />
@@ -173,8 +268,29 @@ export default function ScrapWarehousePage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  {!isOutbound &&
+                    (form.movementType === 'kirim' || form.movementType === 'kirim_savdo') && (
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.createLabel}
+                          onChange={(e) =>
+                            setForm({ ...form, createLabel: e.target.checked })
+                          }
+                          className="rounded"
+                        />
+                        Yangi etiket (barcode) yaratish — {qrPrefix}-...
+                      </label>
+                    )}
                   <div>
-                    <Label>Og&apos;irlik (kg)</Label>
+                    <Label>
+                      Og&apos;irlik (kg)
+                      {isOutbound && form.qrCode
+                        ? ' — etiketdan'
+                        : isOutbound
+                          ? ' yoki etiket skanerlang'
+                          : ''}
+                    </Label>
                     <Input
                       type="number"
                       step="0.001"
@@ -182,8 +298,16 @@ export default function ScrapWarehousePage() {
                       value={form.quantityKg}
                       onChange={(e) => setForm({ ...form, quantityKg: e.target.value })}
                       required
+                      readOnly={isOutbound && !!form.qrCode}
                     />
                   </div>
+                  {isOutbound && !form.qrCode && (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+                      Chiqim / sotish / qayta ishlatish uchun <strong>{qrPrefix}-</strong>{' '}
+                      etiketini skanerlang. Etiketsiz qo&apos;lda kg — faqat umumiy ombor
+                      qoldig&apos;idan (eski qoldiq).
+                    </p>
+                  )}
                   {(form.movementType === 'chiqim_sotish' ||
                     form.movementType === 'kirim_savdo') && (
                     <>
@@ -251,6 +375,26 @@ export default function ScrapWarehousePage() {
           </Button>
         </div>
 
+        {lastLabel && (
+          <Card className="border-green-300 bg-green-50">
+            <CardContent className="pt-4 flex flex-wrap items-center gap-3">
+              <p className="text-sm">
+                Oxirgi etiket:{' '}
+                <span className="font-mono font-bold">{lastLabel.qr}</span> ·{' '}
+                {lastLabel.kg} kg
+              </p>
+              <PrintQrButton
+                code={lastLabel.qr}
+                title={lastLabel.title}
+                lines={[`${lastLabel.kg} kg`]}
+              />
+              <Button type="button" variant="ghost" size="sm" onClick={() => setLastLabel(null)}>
+                Yopish
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card className={tab === 'brak' ? 'border-green-400 ring-1 ring-green-200' : ''}>
             <CardHeader className="pb-2">
@@ -292,6 +436,7 @@ export default function ScrapWarehousePage() {
                     <TableHead>kg</TableHead>
                     <TableHead>Summa</TableHead>
                     <TableHead>Qoldiq</TableHead>
+                    <TableHead>Barcode</TableHead>
                     <TableHead>Izoh</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -305,6 +450,20 @@ export default function ScrapWarehousePage() {
                       </TableCell>
                       <TableCell>{MOVEMENT_LABELS[String(t.movement_type)] || String(t.movement_type)}</TableCell>
                       <TableCell className="font-semibold">{Number(t.quantity_kg).toLocaleString('uz-UZ')}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {t.qr_code ? (
+                          <span className="flex items-center gap-1">
+                            {String(t.qr_code)}
+                            <PrintQrButton
+                              code={String(t.qr_code)}
+                              size="icon"
+                              lines={[`${Number(t.quantity_kg)} kg`]}
+                            />
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
                       <TableCell>
                         {t.total_amount != null
                           ? `${Number(t.total_amount).toLocaleString('uz-UZ')} so'm`

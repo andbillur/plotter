@@ -1,6 +1,9 @@
 import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
+import { generateQrCode } from '../../utils/qr.js';
+
+const QR_PREFIX = { brak: 'BRK', makulatura: 'MAK' };
 
 const IN_TYPES = new Set(['kirim', 'kirim_savdo', 'kesishdan']);
 const OUT_TYPES = new Set(['chiqim', 'chiqim_sotish', 'chiqim_ishlatish']);
@@ -32,6 +35,18 @@ export function validateMovement(warehouseType, movementType) {
 export async function listStock() {
   const { rows } = await db.query(`SELECT * FROM scrap_stock ORDER BY warehouse_type`);
   return rows;
+}
+
+export async function getLotByQr(qrCode) {
+  const code = String(qrCode || '').trim();
+  if (!code) throw new AppError('Barcode kiriting', 400);
+  const { rows } = await db.query(`SELECT * FROM scrap_lots WHERE qr_code = $1`, [code]);
+  if (!rows.length) throw new AppError('Brak/makulatura etiketi topilmadi', 404);
+  const lot = rows[0];
+  if (lot.status !== 'omborxona') {
+    throw new AppError(`Etiket omborda emas (${lot.status})`, 400);
+  }
+  return lot;
 }
 
 export async function listTransactions(query) {
@@ -66,6 +81,12 @@ export async function listTransactions(query) {
   return paginatedResponse(rows, count.rows[0].total, { page, limit });
 }
 
+const LOT_OUT_STATUS = {
+  chiqim: 'chiqilgan',
+  chiqim_sotish: 'sotilgan',
+  chiqim_ishlatish: 'ishlatilgan',
+};
+
 async function applyMovement(client, data, userId) {
   const {
     warehouseType,
@@ -76,9 +97,36 @@ async function applyMovement(client, data, userId) {
     cuttingSessionId,
     counterparty,
     notes,
+    qrCode,
+    createLabel,
   } = data;
-  const qty = Number(quantityKg);
+
+  let qty = Number(quantityKg);
+  let lotId = null;
+  let lotQr = qrCode?.trim() || null;
+
   validateMovement(warehouseType, movementType);
+
+  if (OUT_TYPES.has(movementType) && lotQr) {
+    const lotRes = await client.query(
+      `SELECT * FROM scrap_lots WHERE qr_code = $1 FOR UPDATE`,
+      [lotQr]
+    );
+    if (!lotRes.rows.length) throw new AppError('Etiket topilmadi', 404);
+    const lot = lotRes.rows[0];
+    if (lot.status !== 'omborxona') {
+      throw new AppError(`Etiket omborda emas (${lot.status})`, 400);
+    }
+    if (lot.warehouse_type !== warehouseType) {
+      throw new AppError(
+        `Bu etiket ${lot.warehouse_type === 'brak' ? 'brak' : 'makulatura'} omboriga tegishli`,
+        400
+      );
+    }
+    qty = Number(lot.weight_kg);
+    lotId = lot.id;
+  }
+
   if (!Number.isFinite(qty) || qty <= 0) {
     throw new AppError('Og\'irlik 0 dan katta bo\'lishi kerak', 400);
   }
@@ -120,8 +168,9 @@ async function applyMovement(client, data, userId) {
   const { rows } = await client.query(
     `INSERT INTO scrap_transactions (
       warehouse_type, movement_type, quantity_kg, price_per_kg, total_amount,
-      balance_after_kg, cutting_session_id, counterparty, notes, performed_by
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      balance_after_kg, cutting_session_id, counterparty, notes, performed_by,
+      qr_code, scrap_lot_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [
       warehouseType,
       movementType,
@@ -133,15 +182,43 @@ async function applyMovement(client, data, userId) {
       counterparty?.trim() || null,
       notes?.trim() || null,
       userId,
+      lotQr,
+      lotId,
     ]
   );
+  const tx = rows[0];
+
+  if (lotId && OUT_TYPES.has(movementType)) {
+    const newStatus = LOT_OUT_STATUS[movementType] || 'chiqilgan';
+    await client.query(
+      `UPDATE scrap_lots SET status = $1, out_transaction_id = $2 WHERE id = $3`,
+      [newStatus, tx.id, lotId]
+    );
+  }
+
+  if (IN_TYPES.has(movementType) && createLabel) {
+    lotQr = generateQrCode(QR_PREFIX[warehouseType]);
+    const lotRes = await client.query(
+      `INSERT INTO scrap_lots (qr_code, warehouse_type, weight_kg, status, in_transaction_id)
+       VALUES ($1,$2,$3,'omborxona',$4) RETURNING *`,
+      [lotQr, warehouseType, qty, tx.id]
+    );
+    lotId = lotRes.rows[0].id;
+    await client.query(
+      `UPDATE scrap_transactions SET qr_code = $1, scrap_lot_id = $2 WHERE id = $3`,
+      [lotQr, lotId, tx.id]
+    );
+    tx.qr_code = lotQr;
+    tx.scrap_lot_id = lotId;
+    tx.created_lot = lotRes.rows[0];
+  }
 
   await client.query(
     `UPDATE scrap_stock SET current_weight_kg = $1, updated_at = NOW() WHERE warehouse_type = $2`,
     [balance, warehouseType]
   );
 
-  return rows[0];
+  return tx;
 }
 
 export async function addMovement(data, userId) {
