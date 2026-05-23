@@ -17,6 +17,7 @@ import { SessionWorkersPanel } from '@/components/SessionWorkersPanel';
 import { useAuthStore } from '@/lib/store';
 import { isCostAdmin } from '@/lib/admin';
 import { calcPackagingCost } from '@/lib/cost-calc';
+import { expectedNetWeightKg, STANDARD_WIDTH_KG } from '@/lib/expected-weight';
 import { useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -152,12 +153,29 @@ export default function CuttingPage() {
     }
   };
 
+  const applyCutWidth = (widthStr: string) => {
+    const w = parseFloat(widthStr);
+    const net = expectedNetWeightKg(w);
+    setProdForm((f) => ({
+      ...f,
+      widthCm: widthStr,
+      weightKg: net != null ? String(net) : f.weightKg,
+    }));
+  };
+
   const handleAddProduct = async () => {
     if (!activeSession) return;
+    const widthCm = parseFloat(prodForm.widthCm);
+    if (!widthCm) {
+      toast.error('Eni (sm) kiriting');
+      return;
+    }
+    const net = expectedNetWeightKg(widthCm);
     try {
       await apiClient.addCuttingProduct(String(activeSession.id), {
-        widthCm: parseFloat(prodForm.widthCm),
-        weightKg: parseFloat(prodForm.weightKg),
+        widthCm,
+        netWeightKg: net ?? undefined,
+        weightKg: prodForm.weightKg ? parseFloat(prodForm.weightKg) : undefined,
         color: prodForm.color,
       });
       toast.success('O\'ram qo\'shildi (QR avtomatik)');
@@ -183,8 +201,8 @@ export default function CuttingPage() {
 
   return (
     <RoleGuard permission="cutting:read">
-      <div className="p-4 sm:p-6 space-y-6">
-        <h1 className="text-3xl font-bold">Kesish</h1>
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-4xl mx-auto w-full min-w-0 overflow-x-hidden">
+        <h1 className="text-2xl sm:text-3xl font-bold">Kesish</h1>
 
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="pt-4 text-sm text-blue-900 space-y-2">
@@ -285,6 +303,7 @@ export default function CuttingPage() {
               {showWorkersPanel && (
                 <SessionWorkersPanel
                   sessionId={String(activeSession.id)}
+                  rateUnit="kg/min"
                   loadPool={() =>
                     apiClient.getCuttingWorkersPool() as Promise<
                       { id: string; full_name: string; monthly_salary: number }[]
@@ -304,22 +323,46 @@ export default function CuttingPage() {
                   }
                 />
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <p className="text-xs text-orange-900 bg-white/70 rounded p-2 border border-orange-200">
+                Net: {STANDARD_WIDTH_KG.map((x) => `${x.width}→${x.kg}`).join(', ')} kg
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Eni (sm)</Label>
-                  <Input value={prodForm.widthCm} onChange={(e) => setProdForm({ ...prodForm, widthCm: e.target.value })} />
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    className="min-h-[48px] text-lg"
+                    value={prodForm.widthCm}
+                    onChange={(e) => applyCutWidth(e.target.value)}
+                  />
                 </div>
                 <div>
-                  <Label>Og&apos;irlik (kg)</Label>
-                  <Input value={prodForm.weightKg} onChange={(e) => setProdForm({ ...prodForm, weightKg: e.target.value })} />
+                  <Label>Net og&apos;irlik (kg) — avtomatik</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    className="min-h-[48px] text-lg bg-white font-semibold"
+                    value={prodForm.weightKg}
+                    onChange={(e) => setProdForm({ ...prodForm, weightKg: e.target.value })}
+                  />
+                  <p className="text-xs text-slate-600 mt-1">Kerak bo&apos;lsa qo&apos;lda tuzating</p>
                 </div>
                 <div>
                   <Label>Rang</Label>
-                  <Input list="colors" value={prodForm.color} onChange={(e) => setProdForm({ ...prodForm, color: e.target.value })} />
+                  <Input
+                    list="colors"
+                    className="min-h-[48px]"
+                    value={prodForm.color}
+                    onChange={(e) => setProdForm({ ...prodForm, color: e.target.value })}
+                  />
                   <datalist id="colors">{COLORS.map((c) => <option key={c} value={c} />)}</datalist>
                 </div>
-                <div className="flex items-end">
-                  <Button onClick={handleAddProduct} className="w-full"><Plus className="h-4 w-4 mr-1" />O&apos;ram</Button>
+                <div className="flex items-end sm:col-span-2">
+                  <Button onClick={handleAddProduct} className="w-full min-h-[48px]">
+                    <Plus className="h-4 w-4 mr-1" />
+                    O&apos;ram qo&apos;shish
+                  </Button>
                 </div>
               </div>
               {packPreview && (
@@ -332,46 +375,44 @@ export default function CuttingPage() {
                   </span>
                 </p>
               )}
-              <Button variant="default" onClick={handleFinish}><CheckCircle className="h-4 w-4 mr-1" />Kesishni tugatish</Button>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>QR</TableHead>
-                    <TableHead>Eni</TableHead>
-                    <TableHead>kg</TableHead>
-                    <TableHead>Rang</TableHead>
-                    <TableHead>Qadoqlash</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.map((p) => (
-                    <TableRow key={String(p.id)}>
-                      <TableCell className="font-mono text-xs">
-                        <span className="inline-flex items-center gap-1">
-                          {String(p.qr_code)}
-                          <PrintQrButton
-                            code={String(p.qr_code)}
-                            title="Kesilgan o'ram"
-                            lines={[`${p.width_cm} sm`, `${p.weight_kg} kg`, String(p.color)]}
-                            size="icon"
-                          />
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {p.width_cm} sm
-                        {p.billing_width_cm != null && Number(p.billing_width_cm) !== Number(p.width_cm) && (
-                          <span className="text-xs text-slate-500 block">→ {p.billing_width_cm} sm</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{p.weight_kg}</TableCell>
-                      <TableCell>{String(p.color)}</TableCell>
-                      <TableCell className="text-xs">
-                        {Number(p.packaging_cost || 0).toLocaleString('uz-UZ')} so&apos;m
-                      </TableCell>
+              <Button variant="default" className="w-full sm:w-auto min-h-[48px]" onClick={handleFinish}>
+                <CheckCircle className="h-4 w-4 mr-1" />
+                Kesishni tugatish
+              </Button>
+              <div className="md:hidden divide-y border rounded-lg bg-white">
+                {products.map((p) => (
+                  <div key={String(p.id)} className="p-3 text-sm">
+                    <p className="font-mono text-xs font-bold break-all">{String(p.qr_code)}</p>
+                    <p>{p.width_cm} sm · Net {Number(p.net_weight_kg ?? p.weight_kg)} kg · {String(p.color)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>QR</TableHead>
+                      <TableHead>Eni</TableHead>
+                      <TableHead>Net kg</TableHead>
+                      <TableHead>Rang</TableHead>
+                      <TableHead>Qadoqlash</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {products.map((p) => (
+                      <TableRow key={String(p.id)}>
+                        <TableCell className="font-mono text-xs">{String(p.qr_code)}</TableCell>
+                        <TableCell>{p.width_cm} sm</TableCell>
+                        <TableCell>{Number(p.net_weight_kg ?? p.weight_kg)}</TableCell>
+                        <TableCell>{String(p.color)}</TableCell>
+                        <TableCell className="text-xs">
+                          {Number(p.packaging_cost || 0).toLocaleString('uz-UZ')} so&apos;m
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         )}

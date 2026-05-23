@@ -14,7 +14,7 @@ import {
 import { Loader2, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
-export type WorkerRow = { workerId: string; kgPerMinute: string };
+export type WorkerRow = { workerId: string; rate: string };
 
 type PoolWorker = {
   id: string;
@@ -24,12 +24,22 @@ type PoolWorker = {
 
 type Props = {
   sessionId: string;
+  rateUnit: 'm/min' | 'kg/min';
   loadPool: () => Promise<PoolWorker[]>;
-  loadAssigned: () => Promise<{ id: string; full_name: string; kg_per_minute: number }[]>;
-  onSave: (workers: { workerId: string; kgPerMinute: number }[]) => Promise<void>;
+  loadAssigned: () => Promise<
+    { id: string; full_name: string; meters_per_minute?: number; kg_per_minute?: number }[]
+  >;
+  onSave: (workers: { workerId: string; metersPerMinute?: number; kgPerMinute?: number }[]) => Promise<void>;
 };
 
-export function SessionWorkersPanel({ sessionId, loadPool, loadAssigned, onSave }: Props) {
+export function SessionWorkersPanel({
+  sessionId,
+  rateUnit,
+  loadPool,
+  loadAssigned,
+  onSave,
+}: Props) {
+  const isMeters = rateUnit === 'm/min';
   const [pool, setPool] = useState<PoolWorker[]>([]);
   const [rows, setRows] = useState<WorkerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +56,11 @@ export function SessionWorkersPanel({ sessionId, loadPool, loadAssigned, onSave 
           assigned.length
             ? assigned.map((w) => ({
                 workerId: String(w.id),
-                kgPerMinute: String(w.kg_per_minute),
+                rate: String(
+                  isMeters
+                    ? (w.meters_per_minute ?? w.kg_per_minute ?? '')
+                    : (w.kg_per_minute ?? '')
+                ),
               }))
             : []
         );
@@ -60,16 +74,21 @@ export function SessionWorkersPanel({ sessionId, loadPool, loadAssigned, onSave 
     return () => {
       cancelled = true;
     };
-  }, [sessionId, loadPool, loadAssigned]);
+  }, [sessionId, loadPool, loadAssigned, isMeters]);
 
-  const addRow = () => setRows([...rows, { workerId: '', kgPerMinute: '' }]);
+  const addRow = () => setRows([...rows, { workerId: '', rate: '' }]);
 
   const handleSave = async () => {
     const workers = rows
-      .filter((r) => r.workerId && parseFloat(r.kgPerMinute) > 0)
-      .map((r) => ({ workerId: r.workerId, kgPerMinute: parseFloat(r.kgPerMinute) }));
+      .filter((r) => r.workerId && parseFloat(r.rate) > 0)
+      .map((r) => {
+        const val = parseFloat(r.rate);
+        return isMeters
+          ? { workerId: r.workerId, metersPerMinute: val }
+          : { workerId: r.workerId, kgPerMinute: val };
+      });
     if (!workers.length) {
-      toast.error('Kamida bitta ishchi va kg/min kiriting');
+      toast.error(`Kamida bitta ishchi va ${rateUnit} kiriting`);
       return;
     }
     setSaving(true);
@@ -104,8 +123,14 @@ export function SessionWorkersPanel({ sessionId, loadPool, loadAssigned, onSave 
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
       <p className="text-sm font-medium flex items-center gap-1">
         <Users className="h-4 w-4" />
-        Ishchilar (oylik → kg/min bo&apos;yicha hisob)
+        Ishchilar — {isMeters ? 'm/min (metr/daqiqa)' : 'kg/min'}
       </p>
+      {isMeters && (
+        <p className="text-xs text-slate-600">
+          Vaqt = chiqish (m) ÷ Σ(m/min). Ish haqi = (oylik ÷ oy daqiqalari) × vaqt. 1 m uchun alohida
+          hisoblanadi.
+        </p>
+      )}
       {rows.map((row, i) => (
         <div key={i} className="flex flex-wrap gap-2 items-end">
           <div className="flex-1 min-w-[140px]">
@@ -131,16 +156,16 @@ export function SessionWorkersPanel({ sessionId, loadPool, loadAssigned, onSave 
             </Select>
           </div>
           <div className="w-28">
-            <Label className="text-xs">kg/min</Label>
+            <Label className="text-xs">{rateUnit}</Label>
             <Input
               type="number"
               step="0.01"
               className="h-9"
-              placeholder="2.5"
-              value={row.kgPerMinute}
+              placeholder={isMeters ? '1.2' : '2.5'}
+              value={row.rate}
               onChange={(e) => {
                 const next = [...rows];
-                next[i] = { ...next[i], kgPerMinute: e.target.value };
+                next[i] = { ...next[i], rate: e.target.value };
                 setRows(next);
               }}
             />

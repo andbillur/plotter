@@ -52,14 +52,16 @@ export async function updateWorker(id, data) {
 export async function setProductionWorkers(sessionId, workers) {
   await db.query(`DELETE FROM production_session_workers WHERE session_id = $1`, [sessionId]);
   for (const w of workers) {
+    const mpm = w.metersPerMinute ?? w.kgPerMinute;
     await db.query(
-      `INSERT INTO production_session_workers (session_id, worker_id, kg_per_minute)
-       VALUES ($1,$2,$3) ON CONFLICT (session_id, worker_id) DO UPDATE SET kg_per_minute = $3`,
-      [sessionId, w.workerId, w.kgPerMinute]
+      `INSERT INTO production_session_workers (session_id, worker_id, meters_per_minute, kg_per_minute)
+       VALUES ($1,$2,$3,0)
+       ON CONFLICT (session_id, worker_id) DO UPDATE SET meters_per_minute = $3, kg_per_minute = 0`,
+      [sessionId, w.workerId, mpm]
     );
   }
   const { rows } = await db.query(
-    `SELECT w.*, sw.kg_per_minute
+    `SELECT w.*, sw.meters_per_minute, sw.kg_per_minute
      FROM production_session_workers sw
      JOIN cost_workers w ON w.id = sw.worker_id
      WHERE sw.session_id = $1`,
@@ -70,7 +72,8 @@ export async function setProductionWorkers(sessionId, workers) {
 
 export async function getProductionWorkers(sessionId) {
   const { rows } = await db.query(
-    `SELECT w.id, w.full_name, w.monthly_salary, w.department, sw.kg_per_minute
+    `SELECT w.id, w.full_name, w.monthly_salary, w.department,
+            sw.meters_per_minute, sw.kg_per_minute
      FROM production_session_workers sw
      JOIN cost_workers w ON w.id = sw.worker_id
      WHERE sw.session_id = $1`,

@@ -3,6 +3,7 @@ import { AppError } from '../../utils/errors.js';
 import { generateQrCode } from '../../utils/qr.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
 import { calcPackagingCost, calcSessionLaborCost, getCurrentCostConfig } from '../../utils/costCalc.js';
+import { expectedNetWeightKg } from '../../utils/expectedWeight.js';
 import * as costWorkers from '../costWorkers/costWorkers.service.js';
 
 export async function start({ parentPaperQrCode, machineId, inputWeightKg }, cutterId) {
@@ -48,15 +49,23 @@ export async function addProduct(sessionId, data) {
 
   const config = await getCurrentCostConfig();
   const pack = calcPackagingCost(data.widthCm, config);
+  const netKg =
+    data.netWeightKg != null
+      ? Number(data.netWeightKg)
+      : expectedNetWeightKg(data.widthCm);
+  const weightKg = data.weightKg != null ? Number(data.weightKg) : netKg;
+  if (!netKg || netKg <= 0) {
+    throw new AppError('Eni bo\'yicha net og\'irlik hisoblanmadi', 400);
+  }
   const qr = data.qrCode || generateQrCode('CUT');
   const { rows } = await db.query(
     `INSERT INTO cut_products (
       qr_code, cutting_session_id, parent_paper_id, width_cm, billing_width_cm,
-      weight_kg, length_m, color, stock_status, packaging_cost
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'kesildi',$9) RETURNING *`,
+      net_weight_kg, weight_kg, length_m, color, stock_status, packaging_cost
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'kesildi',$10) RETURNING *`,
     [
       qr, sessionId, sess.rows[0].parent_paper_id, data.widthCm, pack.billingWidthCm,
-      data.weightKg, data.lengthM || null, data.color || 'white', pack.cost,
+      netKg, weightKg, data.lengthM || null, data.color || 'white', pack.cost,
     ]
   );
 

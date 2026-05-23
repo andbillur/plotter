@@ -1,6 +1,7 @@
 import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 import { generateQrCode } from '../../utils/qr.js';
+import { expectedNetWeightKg } from '../../utils/expectedWeight.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
 
 export async function listStock(query) {
@@ -44,7 +45,9 @@ export async function getSummary() {
      ORDER BY color, width_cm`
   );
   const total = await db.query(
-    `SELECT COUNT(*)::int AS n, COALESCE(SUM(weight_kg),0) AS kg
+    `SELECT COUNT(*)::int AS n,
+            COALESCE(SUM(COALESCE(real_weight_kg, weight_kg)),0) AS kg,
+            COALESCE(SUM(net_weight_kg),0) AS net_kg
      FROM cut_products WHERE stock_status = 'omborxonada'`
   );
   return { summary: rows, total: total.rows[0] };
@@ -66,19 +69,32 @@ async function moveToWarehouse(p, data) {
       [p.weight_kg, p.plot_id]
     );
   }
+  const realKg = data.realWeightKg ?? data.weightKg;
+  if (!realKg || realKg <= 0) {
+    throw new AppError('Tarozidan real og\'irlik (kg) kiriting', 400);
+  }
+  const width = data.widthCm ?? p.width_cm;
+  const netKg =
+    p.net_weight_kg ??
+    (width ? expectedNetWeightKg(width) : null) ??
+    p.weight_kg;
+
   const { rows: updated } = await db.query(
     `UPDATE cut_products SET
       stock_status = 'omborxonada',
       plot_id = NULL,
       color = COALESCE($1, color),
       width_cm = COALESCE($2, width_cm),
-      weight_kg = COALESCE($3, weight_kg),
-      length_m = COALESCE($4, length_m)
-     WHERE id = $5 RETURNING *`,
+      net_weight_kg = COALESCE($3, net_weight_kg),
+      real_weight_kg = $4,
+      weight_kg = $4,
+      length_m = COALESCE($5, length_m)
+     WHERE id = $6 RETURNING *`,
     [
       data.color || p.color,
-      data.widthCm ?? p.width_cm,
-      data.weightKg ?? p.weight_kg,
+      width,
+      netKg,
+      realKg,
       data.lengthM ?? p.length_m,
       p.id,
     ]
@@ -99,25 +115,29 @@ export async function registerProduct(data, userId) {
     if (existing.rows.length) {
       return moveToWarehouse(existing.rows[0], data);
     }
-    if (!data.widthCm || !data.weightKg) {
-      throw new AppError('Tarozidan og\'irlik va eni (sm) kiriting', 400);
+    const realKg = data.realWeightKg ?? data.weightKg;
+    if (!data.widthCm || !realKg) {
+      throw new AppError('Tarozidan real og\'irlik va eni (sm) kiriting', 400);
     }
+    const netKg = data.netWeightKg ?? expectedNetWeightKg(data.widthCm) ?? realKg;
     const { rows } = await db.query(
-      `INSERT INTO cut_products (qr_code, width_cm, weight_kg, length_m, color, stock_status)
-       VALUES ($1,$2,$3,$4,$5,'omborxonada') RETURNING *`,
-      [qr, data.widthCm, data.weightKg, data.lengthM || null, data.color || 'white']
+      `INSERT INTO cut_products (qr_code, width_cm, net_weight_kg, real_weight_kg, weight_kg, length_m, color, stock_status)
+       VALUES ($1,$2,$3,$4,$4,$5,$6,'omborxonada') RETURNING *`,
+      [qr, data.widthCm, netKg, realKg, data.lengthM || null, data.color || 'white']
     );
     return rows[0];
   }
 
-  if (!data.widthCm || !data.weightKg) {
-    throw new AppError('Barcode skanerlang yoki og\'irlik va eni kiriting', 400);
+  const realKg = data.realWeightKg ?? data.weightKg;
+  if (!data.widthCm || !realKg) {
+    throw new AppError('Barcode skanerlang yoki real og\'irlik va eni kiriting', 400);
   }
+  const netKg = data.netWeightKg ?? expectedNetWeightKg(data.widthCm) ?? realKg;
   const autoQr = generateQrCode('FG');
   const { rows } = await db.query(
-    `INSERT INTO cut_products (qr_code, width_cm, weight_kg, length_m, color, stock_status)
-     VALUES ($1,$2,$3,$4,$5,'omborxonada') RETURNING *`,
-    [autoQr, data.widthCm, data.weightKg, data.lengthM || null, data.color || 'white']
+    `INSERT INTO cut_products (qr_code, width_cm, net_weight_kg, real_weight_kg, weight_kg, length_m, color, stock_status)
+     VALUES ($1,$2,$3,$4,$4,$5,$6,'omborxonada') RETURNING *`,
+    [autoQr, data.widthCm, netKg, realKg, data.lengthM || null, data.color || 'white']
   );
   return rows[0];
 }
@@ -126,13 +146,15 @@ export async function registerFromQr(qrCode, data = {}) {
   const code = qrCode.trim();
   const { rows } = await db.query(`SELECT * FROM cut_products WHERE qr_code = $1`, [code]);
   if (!rows.length) {
-    if (!data.weightKg || !data.widthCm) {
-      throw new AppError('Yangi etiket — tarozidan og\'irlik va eni kiriting', 400);
+    const realKg = data.realWeightKg ?? data.weightKg;
+    if (!realKg || !data.widthCm) {
+      throw new AppError('Yangi etiket — tarozidan real og\'irlik va eni kiriting', 400);
     }
+    const netKg = data.netWeightKg ?? expectedNetWeightKg(data.widthCm) ?? realKg;
     const inserted = await db.query(
-      `INSERT INTO cut_products (qr_code, width_cm, weight_kg, length_m, color, stock_status)
-       VALUES ($1,$2,$3,$4,$5,'omborxonada') RETURNING *`,
-      [code, data.widthCm, data.weightKg, data.lengthM || null, data.color || 'white']
+      `INSERT INTO cut_products (qr_code, width_cm, net_weight_kg, real_weight_kg, weight_kg, length_m, color, stock_status)
+       VALUES ($1,$2,$3,$4,$4,$5,$6,'omborxonada') RETURNING *`,
+      [code, data.widthCm, netKg, realKg, data.lengthM || null, data.color || 'white']
     );
     return inserted.rows[0];
   }

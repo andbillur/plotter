@@ -58,7 +58,7 @@ productionRouter.put('/sessions/:id/workers', checkPermission('cost_config:manag
   body: z.object({
     workers: z.array(z.object({
       workerId: z.string().uuid(),
-      kgPerMinute: z.number().positive(),
+      metersPerMinute: z.number().positive(),
     })),
   }),
 })), asyncHandler(async (req, res) => {

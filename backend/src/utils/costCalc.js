@@ -29,8 +29,77 @@ export function calcPackagingCost(widthCm, config) {
 }
 
 /**
- * Parallel ishchilar: vaqt = chiqish_kg / sum(kg_per_minute)
- * Har ishchi: (oylik / ish_minut_oy) × vaqt
+ * Chiqish metri: kg = eni(m) × uzunlik(m) × grammaj(g/m²) / 1000
+ * uzunlik(m) = kg × 1000 / (eni_m × grammaj)
+ */
+export function calcOutputMetersFromKg(outputKg, widthMm, grammageG) {
+  const kg = Number(outputKg);
+  const widthM = Number(widthMm) / 1000;
+  const g = Number(grammageG);
+  if (!Number.isFinite(kg) || kg <= 0 || !Number.isFinite(widthM) || widthM <= 0 || !Number.isFinite(g) || g <= 0) {
+    return null;
+  }
+  return Math.round(((kg * 1000) / (widthM * g)) * 100) / 100;
+}
+
+/**
+ * Ishlab chiqarish — parallel ishchilar, m/min:
+ * vaqt (min) = chiqish_metri / Σ(m/min)
+ * ishchi xarajati = (oylik / oy_daqiqa) × vaqt
+ * 1 m uchun = jami_ish_haqi / chiqish_metri
+ */
+export async function calcProductionLaborCost(sessionId, outputMeters) {
+  const config = await getCurrentCostConfig();
+  const minutesPerMonth = Number(config?.work_minutes_per_month) || 12480;
+  const meters = Number(outputMeters) || 0;
+  if (meters <= 0) {
+    return { total: 0, minutes: 0, outputMeters: 0, laborPerMeter: 0, workers: [] };
+  }
+
+  const { rows } = await db.query(
+    `SELECT w.id, w.full_name, w.monthly_salary,
+            COALESCE(sw.meters_per_minute, sw.kg_per_minute) AS meters_per_minute
+     FROM production_session_workers sw
+     JOIN cost_workers w ON w.id = sw.worker_id
+     WHERE sw.session_id = $1 AND w.is_active = true`,
+    [sessionId]
+  );
+  if (!rows.length) {
+    return { total: 0, minutes: 0, outputMeters: meters, laborPerMeter: 0, workers: [] };
+  }
+
+  const totalMPerMin = rows.reduce((s, r) => s + Number(r.meters_per_minute), 0);
+  if (totalMPerMin <= 0) {
+    return { total: 0, minutes: 0, outputMeters: meters, laborPerMeter: 0, workers: [] };
+  }
+
+  const minutes = meters / totalMPerMin;
+  const workers = rows.map((r) => {
+    const salary = Number(r.monthly_salary);
+    const minuteRate = salary / minutesPerMonth;
+    const cost = Math.round(minuteRate * minutes * 100) / 100;
+    return {
+      workerId: r.id,
+      fullName: r.full_name,
+      metersPerMinute: Number(r.meters_per_minute),
+      minuteRate: Math.round(minuteRate * 100) / 100,
+      cost,
+    };
+  });
+  const total = Math.round(workers.reduce((s, w) => s + w.cost, 0) * 100) / 100;
+  const laborPerMeter = Math.round((total / meters) * 10000) / 10000;
+
+  return {
+    total,
+    minutes: Math.round(minutes * 10) / 10,
+    outputMeters: meters,
+    laborPerMeter,
+    workers,
+  };
+}
+
+/**
+ * Kesish — parallel ishchilar, kg/min (o'zgarishsiz)
  */
 export async function calcSessionLaborCost(sessionId, outputKg, table) {
   const config = await getCurrentCostConfig();

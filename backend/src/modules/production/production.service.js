@@ -1,7 +1,7 @@
 import { db } from '../../config/database.js';
 import { AppError } from '../../utils/errors.js';
 import { parsePagination, paginatedResponse } from '../../utils/pagination.js';
-import { calcSessionLaborCost } from '../../utils/costCalc.js';
+import { calcProductionLaborCost, calcOutputMetersFromKg } from '../../utils/costCalc.js';
 import * as costWorkers from '../costWorkers/costWorkers.service.js';
 
 /** Qoldiq bor-yo'qligini tekshirish (kg) */
@@ -153,11 +153,14 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
     const cfg = await client.query(`SELECT id FROM cost_config ORDER BY valid_from DESC LIMIT 1`);
     const c = cost.rows[0];
 
-    const laborWorkers = await calcSessionLaborCost(
-      sessionId,
-      outputWeightKg,
-      'production_session_workers'
+    const bobin = await client.query(
+      `SELECT width_mm, grammaj FROM bobins WHERE id = $1`,
+      [s.bobin_id]
     );
+    const b = bobin.rows[0] || {};
+    const outputMeters = calcOutputMetersFromKg(outputWeightKg, b.width_mm, b.grammaj);
+
+    const laborWorkers = await calcProductionLaborCost(sessionId, outputMeters ?? 0);
     const laborFinal =
       laborWorkers.total > 0 ? laborWorkers.total : Number(c.labor_cost);
     const grandTotal =
@@ -172,14 +175,16 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
     await client.query(
       `INSERT INTO production_cost_reports (
         session_id, cost_config_id, paper_used_kg, clay_used_kg, output_weight_kg,
-        clay_per_kg_paper, paper_cost_total, clay_cost_total, electricity_cost_total,
-        labor_cost_total, labor_workers_cost, other_cost_total, grand_total_cost, cost_per_kg_output,
+        output_meters, clay_per_kg_paper, paper_cost_total, clay_cost_total, electricity_cost_total,
+        labor_cost_total, labor_workers_cost, labor_cost_per_meter, other_cost_total, grand_total_cost, cost_per_kg_output,
         waste_kg, waste_percent
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
       [
         sessionId, cfg.rows[0].id,
-        c.paper_used_kg, c.clay_used_kg, c.output_kg, c.clay_ratio,
+        c.paper_used_kg, c.clay_used_kg, c.output_kg, outputMeters,
+        c.clay_ratio,
         c.paper_cost, c.clay_cost, c.electricity_cost, laborFinal, laborWorkers.total,
+        laborWorkers.laborPerMeter || 0,
         c.other_cost, grandTotal, costPerKg, c.waste_kg, c.waste_percent,
       ]
     );

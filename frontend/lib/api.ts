@@ -225,7 +225,7 @@ class ApiClient {
 
   async addCuttingProduct(
     sessionId: string,
-    body: { widthCm: number; weightKg: number; lengthM?: number; color?: string }
+    body: { widthCm: number; weightKg?: number; netWeightKg?: number; lengthM?: number; color?: string }
   ) {
     return this.request(`/cutting/sessions/${sessionId}/products/add`, {
       method: 'POST',
@@ -280,7 +280,9 @@ class ApiClient {
 
   async registerWarehouseProduct(body: {
     widthCm: number;
-    weightKg: number;
+    realWeightKg: number;
+    netWeightKg?: number;
+    weightKg?: number;
     color?: string;
     lengthM?: number;
     qrCode?: string;
@@ -440,7 +442,7 @@ class ApiClient {
 
   async setProductionSessionWorkers(
     sessionId: string,
-    workers: { workerId: string; kgPerMinute: number }[]
+    workers: { workerId: string; metersPerMinute?: number; kgPerMinute?: number }[]
   ) {
     return this.request(`/production/sessions/${sessionId}/workers`, {
       method: 'PUT',

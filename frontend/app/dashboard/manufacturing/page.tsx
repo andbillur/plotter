@@ -244,8 +244,8 @@ export default function ManufacturingPage() {
 
   return (
     <RoleGuard permission="production:read">
-      <div className="p-4 sm:p-6 space-y-6">
-        <h1 className="text-3xl font-bold">Ishlab chiqarish</h1>
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-4xl mx-auto w-full min-w-0 overflow-x-hidden">
+        <h1 className="text-2xl sm:text-3xl font-bold">Ishlab chiqarish</h1>
 
         {active.length === 0 && (
           <Card>
@@ -317,6 +317,7 @@ export default function ManufacturingPage() {
                   {showWorkersPanel && (
                     <SessionWorkersPanel
                       sessionId={String(s.id)}
+                      rateUnit="m/min"
                       loadPool={() =>
                         apiClient.getProductionWorkersPool() as Promise<
                           { id: string; full_name: string; monthly_salary: number }[]
@@ -327,7 +328,8 @@ export default function ManufacturingPage() {
                         const w = (d.workers || []) as {
                           id: string;
                           full_name: string;
-                          kg_per_minute: number;
+                          meters_per_minute?: number;
+                          kg_per_minute?: number;
                         }[];
                         return w;
                       }}
@@ -571,8 +573,20 @@ export default function ManufacturingPage() {
                     <p>Kley: {fmtKg((detailSession.costReport as Record<string, unknown>).clay_used_kg)}</p>
                     <p>Qog&apos;oz ishlatilgan: {fmtKg((detailSession.costReport as Record<string, unknown>).paper_used_kg)}</p>
                     <p>
+                      Chiqish:{' '}
+                      {Number((detailSession.costReport as Record<string, unknown>).output_meters || 0).toLocaleString('uz-UZ')} m
+                    </p>
+                    <p>
                       Ish haqi (ishchilar):{' '}
                       {Number((detailSession.costReport as Record<string, unknown>).labor_workers_cost || 0).toLocaleString('uz-UZ')} so&apos;m
+                      {Number((detailSession.costReport as Record<string, unknown>).labor_cost_per_meter || 0) > 0 && (
+                        <>
+                          {' '}
+                          (1 m:{' '}
+                          {Number((detailSession.costReport as Record<string, unknown>).labor_cost_per_meter).toLocaleString('uz-UZ')}{' '}
+                          so&apos;m)
+                        </>
+                      )}
                     </p>
                     <p>
                       Jami tannarx:{' '}

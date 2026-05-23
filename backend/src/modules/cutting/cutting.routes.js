@@ -31,7 +31,8 @@ cuttingRouter.post('/sessions/start', checkPermission('cutting:manage'), validat
 cuttingRouter.post('/sessions/:id/products/add', checkPermission('cutting:manage'), validate(z.object({
   body: z.object({
     widthCm: z.number().positive(),
-    weightKg: z.number().positive(),
+    weightKg: z.number().positive().optional(),
+    netWeightKg: z.number().positive().optional(),
     lengthM: z.number().optional(),
     qrCode: z.string().optional(),
     color: z.string().optional(),
