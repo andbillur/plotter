@@ -1,36 +1,28 @@
-# Analitika — sir saqlanadi
+# Power BI — saytda ko‘rish
 
-## Asosiy qoida
+## 1. Power BI Service ga publish
 
-- **CRM grafiklar** (`/dashboard/analytics`) — faqat login qilgan foydalanuvchi ko‘radi.
-- **Publish to web** va ochiq Power BI iframe — **o‘chirilgan** (tannarx, oyliklar sir bo‘lishi uchun).
-- **Power BI Desktop** — faqat ofis kompyuterida, PostgreSQL ulanish; internetga publish qilmang.
+1. Power BI Desktop → hisobot (Page 1–5) → **Publish** → workspace tanlang.
+2. [app.powerbi.com](https://app.powerbi.com) da hisobotni oching.
+3. **File** → **Embed report** → **Publish to web** → **Create** (ochiq havola).
+4. **iframe** kodidan `src="..."` ichidagi URL ni nusxalang.
 
-## CRM grafiklar
+## 2. CRM ga ulash
 
-Analitika → **Grafiklar (himoyalangan)**. API `analytics:dashboard` huquqi talab qiladi.
+1. Render API da: `ALLOW_POWERBI_PUBLIC_EMBED=true` (render.yaml da yoqilgan).
+2. Kod deploy qiling.
+3. CRM → **Analitika** → **Power BI hisobot** tab.
+4. Admin (Sozlamalar huquqi): embed URL ni qo‘ying → **Saqlash**.
+5. Hisobot saytda iframe ichida ko‘rinadi (faqat login qilganlar).
 
-## Power BI Desktop (mahalliy)
+## 3. Eslatma
 
-1. Desktop o‘rnating (bepul).
-2. Analitika → **Power BI Desktop** — server va view nomlari.
-3. Get Data → PostgreSQL → `v_bi_*` view’lar.
-4. **File → Publish to web** ishlatmang.
+- **Publish to web** — internetda ochiq; havolani bilgan har kim ko‘ra oladi (CRM login dan tashqari ham).
+- CRM ichida iframe faqat `analytics:dashboard` huquqi bilan ochiladi.
+- CRM **Grafiklar** tab — alohida, serverdan.
 
 ## Migratsiya
 
 ```bash
 cd backend && npm run migrate
 ```
-
-`011_powerbi_private_only.sql` — saqlangan ochiq embed havolalar tozalanadi.
-
-## Ochiq embedni yoqish (tavsiya etilmaydi)
-
-Faqat maxsus holatda serverda:
-
-```
-ALLOW_POWERBI_PUBLIC_EMBED=true
-```
-
-Hozir `render.yaml` da `false`.

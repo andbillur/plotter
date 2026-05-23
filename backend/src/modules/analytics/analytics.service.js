@@ -291,31 +291,40 @@ export async function getPowerBiConfig() {
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value || '']));
   const publicAllowed = process.env.ALLOW_POWERBI_PUBLIC_EMBED === 'true';
   return {
-    mode: map.powerbi_mode || 'private',
+    mode: publicAllowed && map.powerbi_embed_url ? 'public' : map.powerbi_mode || 'private',
     publicEmbedAllowed: publicAllowed,
     embedUrl: publicAllowed ? map.powerbi_embed_url || '' : '',
-    title: map.powerbi_embed_title || 'Plotter CRM',
-    message: PRIVATE_POWERBI_MESSAGE,
+    title: map.powerbi_embed_title || 'Plotter CRM — Power BI',
+    message: publicAllowed ? '' : PRIVATE_POWERBI_MESSAGE,
   };
 }
 
 export async function setPowerBiConfig({ embedUrl, title }, userId) {
+  const publicAllowed = process.env.ALLOW_POWERBI_PUBLIC_EMBED === 'true';
   if (embedUrl && String(embedUrl).trim()) {
-    if (process.env.ALLOW_POWERBI_PUBLIC_EMBED !== 'true') {
+    if (!publicAllowed) {
       throw new AppError(PRIVATE_POWERBI_MESSAGE, 403);
     }
+    await db.query(
+      `INSERT INTO app_settings (key, value, updated_by) VALUES ('powerbi_embed_url', $1, $2)
+       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW(), updated_by = $2`,
+      [embedUrl.trim(), userId]
+    );
+    await db.query(
+      `INSERT INTO app_settings (key, value, updated_by) VALUES ('powerbi_mode', 'public', $1)
+       ON CONFLICT (key) DO UPDATE SET value = 'public', updated_at = NOW(), updated_by = $1`,
+      [userId]
+    );
   } else {
     await db.query(
       `INSERT INTO app_settings (key, value, updated_by) VALUES ('powerbi_embed_url', '', $1)
        ON CONFLICT (key) DO UPDATE SET value = '', updated_at = NOW(), updated_by = $1`,
       [userId]
     );
-  }
-  if (embedUrl != null && process.env.ALLOW_POWERBI_PUBLIC_EMBED === 'true') {
     await db.query(
-      `INSERT INTO app_settings (key, value, updated_by) VALUES ('powerbi_embed_url', $1, $2)
-       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW(), updated_by = $2`,
-      [embedUrl || '', userId]
+      `INSERT INTO app_settings (key, value, updated_by) VALUES ('powerbi_mode', 'private', $1)
+       ON CONFLICT (key) DO UPDATE SET value = 'private', updated_at = NOW(), updated_by = $1`,
+      [userId]
     );
   }
   if (title != null) {
@@ -325,11 +334,6 @@ export async function setPowerBiConfig({ embedUrl, title }, userId) {
       [title, userId]
     );
   }
-  await db.query(
-    `INSERT INTO app_settings (key, value, updated_by) VALUES ('powerbi_mode', 'private', $1)
-     ON CONFLICT (key) DO UPDATE SET value = 'private', updated_at = NOW(), updated_by = $1`,
-    [userId]
-  );
   return getPowerBiConfig();
 }
 

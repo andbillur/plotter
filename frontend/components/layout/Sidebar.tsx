@@ -19,6 +19,7 @@ import {
   Droplets,
   Truck,
   Boxes,
+  Recycle,
 } from 'lucide-react';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -29,6 +30,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   cut: Scissors,
   plot: Layers,
   warehouse: Boxes,
+  scrap: Recycle,
   shipment: Truck,
   qr: QrCode,
   reports: BarChart3,

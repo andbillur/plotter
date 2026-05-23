@@ -12,9 +12,11 @@ export function isValidPowerBiEmbedUrl(url: string): boolean {
   if (!u) return false;
   try {
     const parsed = new URL(u.startsWith('http') ? u : `https://${u}`);
+    const host = parsed.hostname.toLowerCase();
     return (
-      parsed.hostname.includes('powerbi.com') ||
-      parsed.hostname.includes('powerbi.microsoft.com')
+      host.includes('powerbi.com') ||
+      host.includes('powerbi.microsoft.com') ||
+      host.includes('pbidedicated.windows.net')
     );
   } catch {
     return false;

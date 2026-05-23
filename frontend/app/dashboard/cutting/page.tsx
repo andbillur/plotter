@@ -10,6 +10,12 @@ import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { apiClient } from '@/lib/api';
 import { sessionStatusLabels } from '@/lib/constants';
 import { PrintQrButton } from '@/components/PrintQrButton';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Play, Plus, CheckCircle, Loader2, Info, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +32,14 @@ const COLORS = ['white', 'cream', 'blue', 'grey', 'other'];
 export default function CuttingPage() {
   const user = useAuthStore((s) => s.user);
   const showWorkersPanel = isCostAdmin(user);
+  const canScrap = useAuthStore((s) => s.hasPermission('scrap:manage'));
+  const [wasteDialog, setWasteDialog] = useState<{
+    sessionId: string;
+    sessionCode: string;
+    remainingKg: number;
+  } | null>(null);
+  const [wasteBrakKg, setWasteBrakKg] = useState('');
+  const [wasteMakKg, setWasteMakKg] = useState('');
   const [sessions, setSessions] = useState<Record<string, unknown>[]>([]);
   const [availablePapers, setAvailablePapers] = useState<Record<string, unknown>[]>([]);
   const [activeSession, setActiveSession] = useState<Record<string, unknown> | null>(null);
@@ -190,9 +204,42 @@ export default function CuttingPage() {
 
   const handleFinish = async () => {
     if (!activeSession) return;
+    const sessionId = String(activeSession.id);
+    const sessionCode = String(activeSession.session_code);
     try {
-      await apiClient.finishCutting(String(activeSession.id));
+      const res = await apiClient.finishCutting(sessionId);
+      const wasteKg = Number(res.session?.waste_kg ?? 0);
       toast.success('Kesish tugallandi');
+      load();
+      if (canScrap && wasteKg > 0.01) {
+        try {
+          const st = await apiClient.getCuttingWasteStatus(sessionId);
+          const rem = Number(st.remaining_waste_kg ?? wasteKg);
+          if (rem > 0.01) {
+            setWasteBrakKg(String(rem));
+            setWasteMakKg('0');
+            setWasteDialog({ sessionId, sessionCode, remainingKg: rem });
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Xatolik');
+    }
+  };
+
+  const handleAllocateWaste = async () => {
+    if (!wasteDialog) return;
+    const brak = parseFloat(wasteBrakKg) || 0;
+    const mak = parseFloat(wasteMakKg) || 0;
+    try {
+      await apiClient.allocateCuttingWaste(wasteDialog.sessionId, {
+        brakKg: brak,
+        makulaturaKg: mak,
+      });
+      toast.success('Brak omborlariga ajratildi');
+      setWasteDialog(null);
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Xatolik');
@@ -417,6 +464,47 @@ export default function CuttingPage() {
           </Card>
         )}
 
+        <Dialog open={!!wasteDialog} onOpenChange={(o) => !o && setWasteDialog(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Brakni omborga ajratish — {wasteDialog?.sessionCode}</DialogTitle>
+            </DialogHeader>
+            {wasteDialog && (
+              <div className="space-y-4 text-sm">
+                <p className="text-slate-600">
+                  Jami brak: <strong>{wasteDialog.remainingKg.toLocaleString('uz-UZ')} kg</strong>
+                </p>
+                <p className="text-xs text-slate-500">
+                  Brak — qayta ishlatiladi. Makulatura (otxod) — ishlatilmaydi, keyin sotiladi.
+                </p>
+                <div>
+                  <Label>Brak omboriga (kg)</Label>
+                  <Input
+                    type="number"
+                    step="0.001"
+                    className="mt-1"
+                    value={wasteBrakKg}
+                    onChange={(e) => setWasteBrakKg(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Makulatura omboriga (kg)</Label>
+                  <Input
+                    type="number"
+                    step="0.001"
+                    className="mt-1"
+                    value={wasteMakKg}
+                    onChange={(e) => setWasteMakKg(e.target.value)}
+                  />
+                </div>
+                <Button className="w-full" onClick={handleAllocateWaste}>
+                  Omborga kirim qilish
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         <Card>
           <CardHeader><CardTitle>Tarix</CardTitle></CardHeader>
           <CardContent className="p-0">
@@ -429,6 +517,7 @@ export default function CuttingPage() {
                     <TableHead>Kod</TableHead>
                     <TableHead>Holat</TableHead>
                     <TableHead>Brak %</TableHead>
+                    {canScrap && <TableHead>Ombor</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -437,6 +526,39 @@ export default function CuttingPage() {
                       <TableCell className="font-mono">{String(s.session_code)}</TableCell>
                       <TableCell><Badge>{sessionStatusLabels[String(s.status)] || String(s.status)}</Badge></TableCell>
                       <TableCell>{Number(s.waste_percent || 0).toFixed(2)}%</TableCell>
+                      {canScrap && (
+                        <TableCell>
+                          {s.status === 'tugallangan' && Number(s.waste_kg) > 0.01 ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => {
+                                try {
+                                  const st = await apiClient.getCuttingWasteStatus(String(s.id));
+                                  const rem = Number(st.remaining_waste_kg ?? 0);
+                                  if (rem <= 0.01) {
+                                    toast.info('Brak allaqachon ajratilgan');
+                                    return;
+                                  }
+                                  setWasteBrakKg(String(rem));
+                                  setWasteMakKg('0');
+                                  setWasteDialog({
+                                    sessionId: String(s.id),
+                                    sessionCode: String(s.session_code),
+                                    remainingKg: rem,
+                                  });
+                                } catch (err) {
+                                  toast.error(err instanceof Error ? err.message : 'Xatolik');
+                                }
+                              }}
+                            >
+                              Ajratish
+                            </Button>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

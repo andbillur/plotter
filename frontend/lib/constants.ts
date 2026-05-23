@@ -20,6 +20,7 @@ export const navigationItems = [
   { id: 'cutting', label: 'Kesish', href: '/dashboard/cutting', icon: 'cut', permission: 'cutting:read' },
   { id: 'plot', label: 'PLOT', href: '/dashboard/plot', icon: 'plot', permission: 'plot:read' },
   { id: 'warehouse', label: 'Tayyor mahsulot', href: '/dashboard/warehouse', icon: 'warehouse', permission: 'warehouse:read' },
+  { id: 'scrap', label: 'Brak / makulatura', href: '/dashboard/scrap', icon: 'scrap', permission: 'scrap:read' },
   { id: 'shipments', label: 'Jo\'natmalar', href: '/dashboard/shipments', icon: 'shipment', permission: 'shipment:read' },
   { id: 'qr', label: 'QR Skaner', href: '/dashboard/qr-scanner', icon: 'qr', permission: null },
   { id: 'analytics', label: 'Analitika', href: '/dashboard/analytics', icon: 'reports', permission: 'analytics:dashboard' },

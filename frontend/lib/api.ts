@@ -359,6 +359,18 @@ class ApiClient {
     }>('/analytics/powerbi/config');
   }
 
+  async setPowerBiConfig(body: { embedUrl?: string; title?: string }) {
+    return this.request<{
+      mode: string;
+      publicEmbedAllowed: boolean;
+      embedUrl: string;
+      title: string;
+    }>('/analytics/powerbi/config', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
   async clearPublicPowerBiEmbed() {
     return this.request('/analytics/powerbi/public-embed', { method: 'DELETE' });
   }
@@ -515,6 +527,44 @@ class ApiClient {
     return this.request<{ ok: boolean }>(`/users/${id}/password`, {
       method: 'PATCH',
       body: JSON.stringify({ password }),
+    });
+  }
+
+  // Brak / makulatura ombori
+  async getScrapStock() {
+    return this.request<{ warehouse_type: string; current_weight_kg: number }[]>('/scrap/stock');
+  }
+
+  async getScrapTransactions(params?: Record<string, string>) {
+    const q = params ? `?${new URLSearchParams(params)}` : '';
+    return this.request<PaginatedResponse<Record<string, unknown>>>(`/scrap/transactions${q}`);
+  }
+
+  async addScrapMovement(body: {
+    warehouseType: 'brak' | 'makulatura';
+    movementType: string;
+    quantityKg: number;
+    pricePerKg?: number;
+    counterparty?: string;
+    notes?: string;
+  }) {
+    return this.request<Record<string, unknown>>('/scrap/movements', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getCuttingWasteStatus(sessionId: string) {
+    return this.request<Record<string, unknown>>(`/scrap/cutting/${sessionId}/waste-status`);
+  }
+
+  async allocateCuttingWaste(
+    sessionId: string,
+    body: { brakKg: number; makulaturaKg: number }
+  ) {
+    return this.request<Record<string, unknown>>(`/scrap/cutting/${sessionId}/allocate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     });
   }
 
