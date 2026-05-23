@@ -44,7 +44,8 @@ export function calcPackagingCost(widthCm, config) {
  */
 export function calcOutputMetersFromKg(outputKg, widthMm, grammageG) {
   const kg = Number(outputKg);
-  const widthM = Number(widthMm) / 1000;
+  const widthNorm = normalizeWidthMm(widthMm);
+  const widthM = widthNorm ? widthNorm / 1000 : 0;
   const g = Number(grammageG);
   if (!Number.isFinite(kg) || kg <= 0 || !Number.isFinite(widthM) || widthM <= 0 || !Number.isFinite(g) || g <= 0) {
     return null;
@@ -52,9 +53,27 @@ export function calcOutputMetersFromKg(outputKg, widthMm, grammageG) {
   return Math.round(((kg * 1000) / (widthM * g)) * 100) / 100;
 }
 
+/** Bobin eni (mm) — bazada ko‘pincha 182 (sm) yoziladi, formula uchun 1820 mm */
+export function normalizeWidthMm(widthMm) {
+  const w = Number(widthMm);
+  if (!Number.isFinite(w) || w <= 0) return null;
+  if (w >= 1000) return w;
+  if (w >= 100 && w < 1000) return w * 10;
+  return w;
+}
+
+/** m/min — 0.01 … 150 oralig‘ida bo‘lishi kerak */
+export function sanitizeMetersPerMinute(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  if (n > 150) return 0;
+  return n;
+}
+
 /** 1 metr massasi (kg): eni(m) × grammaj / 1000 */
 export function calcKgPerMeter(widthMm, grammageG) {
-  const widthM = Number(widthMm) / 1000;
+  const widthNorm = normalizeWidthMm(widthMm);
+  const widthM = widthNorm ? widthNorm / 1000 : 0;
   const g = Number(grammageG);
   if (!Number.isFinite(widthM) || widthM <= 0 || !Number.isFinite(g) || g <= 0) return 0;
   return (widthM * g) / 1000;
@@ -94,6 +113,9 @@ export function calcTeamMinuteRate(totalMonthlySalary, minutesPerMonth) {
  * 4) 1 kg ish haqi = daqiqalik_stavka × 1_kg_vaqti
  * 5) Sessiya = 1_kg_ish_haqi × chiqish_kg
  */
+/** Ish haqi 1 kg uchun — bundan yuqori bo‘lsa xato hisob */
+export const MAX_LABOR_COST_PER_KG = 50_000;
+
 export async function calcProductionLaborCost(sessionId, outputKg, widthMm, grammageG) {
   const config = await getCurrentCostConfig();
   const minutesPerMonth = getSalaryMinutesPerMonth(config);
@@ -117,29 +139,38 @@ export async function calcProductionLaborCost(sessionId, outputKg, widthMm, gram
   if (outKg <= 0) return empty;
 
   const { rows } = await db.query(
-    `SELECT w.id, w.full_name, w.monthly_salary,
-            COALESCE(sw.meters_per_minute, sw.kg_per_minute) AS meters_per_minute
+    `SELECT w.id, w.full_name, w.monthly_salary, sw.meters_per_minute
      FROM production_session_workers sw
      JOIN cost_workers w ON w.id = sw.worker_id
-     WHERE sw.session_id = $1 AND w.is_active = true`,
+     WHERE sw.session_id = $1 AND w.is_active = true
+       AND sw.meters_per_minute IS NOT NULL AND sw.meters_per_minute > 0`,
     [sessionId]
   );
   if (!rows.length) return empty;
 
-  const totalMPerMin = rows.reduce((s, r) => s + Number(r.meters_per_minute), 0);
+  const totalMPerMin = rows.reduce(
+    (s, r) => s + sanitizeMetersPerMinute(r.meters_per_minute),
+    0
+  );
   if (totalMPerMin <= 0) return empty;
 
+  const widthNorm = normalizeWidthMm(widthMm);
+  const g = Number(grammageG);
+  if (!widthNorm || !Number.isFinite(g) || g <= 0) return empty;
   const totalSalary = rows.reduce((s, r) => s + Number(r.monthly_salary), 0);
-  const kgPerMin = calcKgPerMinFromMetersPerMin(totalMPerMin, widthMm, grammageG);
+  const kgPerMin = calcKgPerMinFromMetersPerMin(totalMPerMin, widthNorm, g);
   if (kgPerMin <= 0) return empty;
 
   const minutesPerKg = calcMinutesPerKg(kgPerMin);
   const teamMinuteRate = calcTeamMinuteRate(totalSalary, minutesPerMonth);
-  const laborPerKg = Math.round(teamMinuteRate * minutesPerKg * 100) / 100;
+  let laborPerKg = Math.round(teamMinuteRate * minutesPerKg * 100) / 100;
+  if (laborPerKg > MAX_LABOR_COST_PER_KG) {
+    laborPerKg = MAX_LABOR_COST_PER_KG;
+  }
   const total = Math.round(laborPerKg * outKg * 100) / 100;
   const sessionMinutes = Math.round(minutesPerKg * outKg * 10) / 10;
 
-  const kgPerM = calcKgPerMeter(widthMm, grammageG);
+  const kgPerM = calcKgPerMeter(widthNorm, g);
   const laborPerMeter = kgPerM > 0 ? Math.round(laborPerKg * kgPerM * 10000) / 10000 : 0;
 
   const workers = rows.map((r) => {

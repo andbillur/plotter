@@ -173,8 +173,20 @@ export async function finish(sessionId, { outputWeightKg, bobinRemainingWeightKg
       bMeta.width_mm,
       bMeta.grammaj
     );
-    const laborFinal =
+    let laborFinal =
       laborWorkers.total > 0 ? laborWorkers.total : Number(c.labor_cost);
+
+    const wc = await client.query(
+      `SELECT COUNT(*)::int AS n FROM production_session_workers WHERE session_id = $1`,
+      [sessionId]
+    );
+    if (Number(wc.rows[0]?.n) > 0 && laborWorkers.total <= 0) {
+      throw new AppError(
+        'Ish haqi hisoblanmadi: bobinda eni (mm) va grammaj to\'g\'ri kiriting (masalan eni 1820, grammaj 40). Ishchilar m/min ni tekshiring.',
+        400
+      );
+    }
+
     const grandTotal =
       Number(c.paper_cost) +
       Number(c.clay_cost) +
@@ -268,12 +280,28 @@ export async function getById(id) {
     );
     costReport = cost.rows[0] || null;
     if (costReport && isInflatedProductionLaborReport(costReport)) {
-      costReport = await repairProductionCostReport(
+      const repaired = await repairProductionCostReport(
         costReport,
         id,
         rows[0].bobin_width_mm,
         rows[0].bobin_grammaj
       );
+      await db.query(
+        `UPDATE production_cost_reports SET
+          labor_cost_total = $1, labor_workers_cost = $2, labor_cost_per_kg = $3,
+          labor_cost_per_meter = $4, grand_total_cost = $5, cost_per_kg_output = $6
+         WHERE id = $7`,
+        [
+          repaired.labor_cost_total,
+          repaired.labor_workers_cost,
+          repaired.labor_cost_per_kg,
+          repaired.labor_cost_per_meter,
+          repaired.grand_total_cost,
+          repaired.cost_per_kg_output,
+          costReport.id,
+        ]
+      );
+      costReport = repaired;
     }
   }
   const workers = await costWorkers.getProductionWorkers(id);

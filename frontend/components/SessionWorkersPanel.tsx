@@ -58,7 +58,7 @@ export function SessionWorkersPanel({
                 workerId: String(w.id),
                 rate: String(
                   isMeters
-                    ? (w.meters_per_minute ?? w.kg_per_minute ?? '')
+                    ? (w.meters_per_minute ?? '')
                     : (w.kg_per_minute ?? '')
                 ),
               }))

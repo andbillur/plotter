@@ -331,7 +331,6 @@ export default function ManufacturingPage() {
                           id: string;
                           full_name: string;
                           meters_per_minute?: number;
-                          kg_per_minute?: number;
                         }[];
                         return w;
                       }}
